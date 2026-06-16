@@ -1,0 +1,53 @@
+const express = require("express");
+
+const router = express.Router();
+
+const authMiddleware = require("../middleware/authMiddleware");
+const roleMiddleware = require("../middleware/roleMiddleware");
+
+const {
+
+    createCoupon,
+    getCoupons,
+    applyCoupon
+
+} = require("../controllers/couponController");
+
+
+// Create Coupon (Admin)
+
+router.post(
+
+    "/",
+
+    authMiddleware,
+
+    roleMiddleware("admin"),
+
+    createCoupon
+
+);
+
+
+// Get Coupons
+
+router.get(
+
+    "/",
+
+    getCoupons
+
+);
+
+
+// Apply Coupon
+
+router.post(
+
+    "/apply",
+
+    applyCoupon
+
+);
+
+module.exports = router;
