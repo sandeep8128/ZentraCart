@@ -10,6 +10,7 @@ import ProductDetails from "../pages/ProductDetails";
 import Checkout from "../pages/Checkout";
 import MyOrders from "../pages/MyOrders";
 import Wishlist from "../pages/Wishlist";
+import SellerDashboard from "../pages/SellerDashboard";
 
 function AppRoutes() {
   return (
@@ -33,6 +34,8 @@ function AppRoutes() {
       <Route path="/orders" element={<MyOrders />} />
 
       <Route path="/wishlist" element={<Wishlist />} />
+
+      <Route path="/seller-dashboard" element={<SellerDashboard />} />
     </Routes>
   );
 }
