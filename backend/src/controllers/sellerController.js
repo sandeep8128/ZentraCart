@@ -1,118 +1,140 @@
 const Order = require("../models/Order");
 const Product = require("../models/Product");
-
+const Notification = require("../models/Notification");
 
 // ==========================
 // SELLER ORDERS
 // ==========================
 
-exports.getSellerOrders = async(req,res)=>{
+exports.getSellerOrders = async (req, res) => {
+  try {
+    const sellerProducts = await Product.find({
+      seller: req.user.id,
+    });
 
-try{
+    const productIds = sellerProducts.map((product) => product._id);
 
-const sellerProducts = await Product.find({
-seller:req.user.id
-});
+    const orders = await Order.find({
+      "products.product": {
+        $in: productIds,
+      },
+    })
+      .populate("user", "name email")
+      .populate("products.product");
 
-const productIds = sellerProducts.map(
-product => product._id
-);
+    res.json({
+      totalOrders: orders.length,
 
-
-const orders = await Order.find({
-"products.product":{
-$in:productIds
-}
-})
-.populate("user","name email")
-.populate("products.product");
-
-
-res.json({
-
-totalOrders:orders.length,
-
-orders
-
-});
-
-}
-catch(error){
-
-res.status(500).json({
-
-message:error.message
-
-});
-
-}
-
+      orders,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
 };
-
-
-
 
 // ==========================
 // SELLER ANALYTICS
 // ==========================
 
-exports.getSellerAnalytics = async(req,res)=>{
+exports.getSellerAnalytics = async (req, res) => {
+  try {
+    const sellerProducts = await Product.find({
+      seller: req.user.id,
+    });
 
-try{
+    const productIds = sellerProducts.map((product) => product._id);
 
-const sellerProducts = await Product.find({
-seller:req.user.id
-});
+    const orders = await Order.find({
+      "products.product": {
+        $in: productIds,
+      },
+    });
 
-const productIds = sellerProducts.map(
-product => product._id
-);
+    let totalRevenue = 0;
 
-const orders = await Order.find({
-"products.product":{
-$in:productIds
-}
-});
+    orders.forEach((order) => {
+      totalRevenue += order.finalAmount || order.totalAmount;
+    });
 
-let totalRevenue = 0;
+    const approvedProducts = await Product.countDocuments({
+      seller: req.user.id,
+      approvalStatus: "approved",
+    });
 
-orders.forEach(order=>{
-totalRevenue += order.finalAmount || order.totalAmount;
-});
+    const pendingProducts = await Product.countDocuments({
+      seller: req.user.id,
+      approvalStatus: "pending",
+    });
 
-const approvedProducts =
-await Product.countDocuments({
-seller:req.user.id,
-approvalStatus:"approved"
-});
+    res.json({
+      totalProducts: sellerProducts.length,
 
-const pendingProducts =
-await Product.countDocuments({
-seller:req.user.id,
-approvalStatus:"pending"
-});
+      approvedProducts,
 
-res.json({
+      pendingProducts,
 
-totalProducts:sellerProducts.length,
+      totalOrders: orders.length,
 
-approvedProducts,
+      totalRevenue,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+exports.updateOrderStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
 
-pendingProducts,
+    const order = await Order.findById(req.params.id);
 
-totalOrders:orders.length,
+    if (!order) {
+      return res.status(404).json({
+        message: "Order not found",
+      });
+    }
 
-totalRevenue
+    order.orderStatus = status;
 
-});
+    await order.save();
+    
+    await Notification.create({
+      user: order.user,
+      title: "Order Status Updated",
+      message: `Your order status is now ${status}`,
+    });
 
-}
-catch(error){
+    res.json({
+      message: "Order Status Updated",
+      order,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+exports.deleteOrder = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
 
-res.status(500).json({
-message:error.message
-});
+    if (!order) {
+      return res.status(404).json({
+        message: "Order not found",
+      });
+    }
 
-}
+    await Order.findByIdAndDelete(req.params.id);
 
+    res.json({
+      message: "Order Deleted Successfully",
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
 };

@@ -36,6 +36,7 @@ message:error.message
 
 
 
+
 // APPROVE PRODUCT
 
 
@@ -178,4 +179,69 @@ exports.getDashboardStats = async (req, res) => {
 
     }
 
+};
+
+// ==========================
+// GET ALL USERS
+// ==========================
+
+exports.getAllUsers = async (req, res) => {
+  try {
+    const users = await User.find().select("-password");
+
+    res.json({
+      count: users.length,
+      users,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
+// ==========================
+// DELETE USER
+// ==========================
+
+exports.deleteUser = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    await User.findByIdAndDelete(req.params.id);
+
+    res.json({
+      message: "User Deleted Successfully",
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+// ==========================
+// GET ALL ORDERS
+// ==========================
+
+exports.getAllOrders = async (req, res) => {
+  try {
+    const orders = await Order.find()
+      .populate("user", "name email")
+      .populate("products.product", "title price");
+
+    res.json({
+      count: orders.length,
+      orders,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
 };

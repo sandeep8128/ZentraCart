@@ -61,7 +61,34 @@ message:"Invalid Token"
 
 
 };
+// ==========================
+// UPDATE PROFILE
+// ==========================
 
+exports.updateProfile = async (req, res) => {
+  try {
+    const { name } = req.body;
+
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      { name },
+      { new: true }
+    );
+
+    res.json({
+      message: "Profile Updated Successfully",
+      user: {
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
 
 
 module.exports = authMiddleware;

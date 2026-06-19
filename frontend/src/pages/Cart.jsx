@@ -36,7 +36,7 @@ function Cart() {
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        },
+        }
       );
 
       fetchCart();
@@ -64,71 +64,222 @@ function Cart() {
   }, []);
 
   const total = cartItems.reduce(
-    (sum, item) => sum + item.product.price * item.quantity,
-    0,
+    (sum, item) =>
+      sum +
+      item.product.price * item.quantity,
+    0
   );
 
   return (
     <>
       <Navbar />
 
-      <div style={{ padding: "30px" }}>
-        <h1>My Cart</h1>
+      <div className="max-w-7xl mx-auto p-6">
+
+        <h1 className="text-4xl font-bold text-[#285570] mb-8">
+          My Cart 🛒
+        </h1>
 
         {cartItems.length === 0 ? (
-          <h3>Cart Empty</h3>
+          <div
+            className="
+            bg-white
+            border
+            border-[#CBCAC7]
+            rounded-2xl
+            p-10
+            text-center
+            "
+          >
+            <h3 className="text-2xl text-gray-500">
+              Your Cart Is Empty
+            </h3>
+          </div>
         ) : (
-          <>
-            {cartItems.map((item) => (
-              <div
-                key={item._id}
-                style={{
-                  border: "1px solid gray",
-                  padding: "20px",
-                  marginBottom: "20px",
-                }}
-              >
-                <h3>{item.product?.title}</h3>
+          <div className="grid lg:grid-cols-3 gap-8">
 
-                <p>₹{item.product?.price}</p>
+            {/* Cart Items */}
 
+            <div className="lg:col-span-2">
+
+              {cartItems.map((item) => (
                 <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "10px",
-                    marginTop: "10px",
-                  }}
+                  key={item._id}
+                  className="
+                  bg-white
+                  border
+                  border-[#CBCAC7]
+                  rounded-2xl
+                  p-5
+                  mb-5
+                  shadow-sm
+                  "
                 >
-                  <button
-                    onClick={() => updateQuantity(item._id, item.quantity - 1)}
-                  >
-                    -
-                  </button>
+                  <div className="flex gap-5">
 
-                  <span>{item.quantity}</span>
+                    {item.product?.images?.[0]
+                      ?.url && (
+                      <img
+                        src={
+                          item.product.images[0]
+                            .url
+                        }
+                        alt={
+                          item.product.title
+                        }
+                        className="
+                        w-32
+                        h-32
+                        object-cover
+                        rounded-xl
+                        "
+                      />
+                    )}
 
-                  <button
-                    onClick={() => updateQuantity(item._id, item.quantity + 1)}
-                  >
-                    +
-                  </button>
+                    <div className="flex-1">
 
-                  <button onClick={() => removeItem(item._id)}>Remove</button>
+                      <h3 className="text-xl font-semibold text-[#333333]">
+                        {
+                          item.product?.title
+                        }
+                      </h3>
+
+                      <p className="text-[#285570] text-2xl font-bold mt-2">
+                        ₹
+                        {
+                          item.product?.price
+                        }
+                      </p>
+
+                      <div className="flex items-center gap-3 mt-4">
+
+                        <button
+                          onClick={() =>
+                            updateQuantity(
+                              item._id,
+                              item.quantity - 1
+                            )
+                          }
+                          className="
+                          w-10
+                          h-10
+                          bg-gray-200
+                          rounded-lg
+                          "
+                        >
+                          -
+                        </button>
+
+                        <span className="font-bold text-lg">
+                          {
+                            item.quantity
+                          }
+                        </span>
+
+                        <button
+                          onClick={() =>
+                            updateQuantity(
+                              item._id,
+                              item.quantity + 1
+                            )
+                          }
+                          className="
+                          w-10
+                          h-10
+                          bg-gray-200
+                          rounded-lg
+                          "
+                        >
+                          +
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            removeItem(
+                              item._id
+                            )
+                          }
+                          className="
+                          ml-3
+                          bg-red-500
+                          text-white
+                          px-4
+                          py-2
+                          rounded-lg
+                          hover:bg-red-600
+                          "
+                        >
+                          Remove
+                        </button>
+
+                      </div>
+
+                      <h4 className="mt-4 font-semibold">
+                        Subtotal: ₹
+                        {item.product.price *
+                          item.quantity}
+                      </h4>
+
+                    </div>
+                  </div>
                 </div>
+              ))}
 
-                <h4>Subtotal: ₹{item.product.price * item.quantity}</h4>
+            </div>
+
+            {/* Summary */}
+
+            <div
+              className="
+              bg-white
+              border
+              border-[#CBCAC7]
+              rounded-2xl
+              p-6
+              h-fit
+              shadow-sm
+              "
+            >
+              <h2 className="text-2xl font-bold text-[#285570] mb-5">
+                Order Summary
+              </h2>
+
+              <div className="flex justify-between mb-4">
+                <span>Total Items</span>
+
+                <span>
+                  {cartItems.length}
+                </span>
               </div>
-            ))}
 
-            <hr />
+              <div className="flex justify-between mb-6">
+                <span>Total Amount</span>
 
-            <h2>Total: ₹{total}</h2>
+                <span className="font-bold text-xl text-[#285570]">
+                  ₹{total}
+                </span>
+              </div>
 
-            <button onClick={() => navigate("/checkout")}>
-              Proceed To Checkout
-            </button>
-          </>
+              <button
+                onClick={() =>
+                  navigate("/checkout")
+                }
+                className="
+                w-full
+                bg-[#285570]
+                text-white
+                py-4
+                rounded-xl
+                font-semibold
+                hover:bg-[#1E4257]
+                transition
+                "
+              >
+                Proceed To Checkout
+              </button>
+            </div>
+
+          </div>
         )}
       </div>
     </>

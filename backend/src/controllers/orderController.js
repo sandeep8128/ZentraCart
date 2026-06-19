@@ -4,129 +4,127 @@ const Order = require("../models/Order");
 const Cart = require("../models/Cart");
 const Coupon = require("../models/Coupon");
 const User = require("../models/User");
+const Product = require("../models/Product");
 const sendEmail = require("../utils/sendEmail");
 
-// ==========================
-// CREATE ORDER
-// ==========================
-
-exports.createOrder = async(req,res)=>{
-
-try{
-
-const cartItems = await Cart.find({
-user:req.user.id
-}).populate("product");
-
-
-if(cartItems.length === 0){
-
-return res.status(400).json({
-message:"Cart is empty"
-});
-
-}
-
-
-let totalAmount = 0;
-
-const products = [];
-
-
-cartItems.forEach(item=>{
-
-if(!item.product) return;
-
-totalAmount += item.product.price * item.quantity;
-
-products.push({
-
-product:item.product._id,
-
-quantity:item.quantity
-
-});
-
-});
-
-
-if(products.length === 0){
-
-return res.status(400).json({
-message:"No valid products found in cart"
-});
-
-}
-
-
-// ==========================
-// COUPON LOGIC
-// ==========================
-
-let discountAmount = 0;
-let finalAmount = totalAmount;
-let couponCode = "";
-
-const { coupon } = req.body;
-
-if(coupon){
-
-const couponData = await Coupon.findOne({
-
-code: coupon.toUpperCase(),
-isActive: true
-
-});
-
-if(couponData){
-
-if(new Date() <= couponData.expiryDate){
-
-discountAmount =
-(totalAmount * couponData.discount) / 100;
-
-finalAmount =
-totalAmount - discountAmount;
-
-couponCode =
-couponData.code;
-
-}
-
-}
-
-}
-
 
 // ==========================
 // CREATE ORDER
 // ==========================
 
-const order = await Order.create({
+exports.createOrder = async (req, res) => {
+  try {
+    const cartItems = await Cart.find({
+      user: req.user.id,
+    }).populate("product");
 
-user:req.user.id,
+    if (cartItems.length === 0) {
+      return res.status(400).json({
+        message: "Cart is empty",
+      });
+    }
 
-products,
+    let totalAmount = 0;
 
-totalAmount,
+    const products = [];
 
-couponCode,
+    cartItems.forEach((item) => {
+      if (!item.product) return;
 
-discountAmount,
+      totalAmount += item.product.price * item.quantity;
 
-finalAmount
+      products.push({
+        product: item.product._id,
 
-});
+        quantity: item.quantity,
+      });
+    });
 
-const user = await User.findById(req.user.id);
+    // ==========================
+    // STOCK CHECK
+    // ==========================
 
-await sendEmail(
+    for (const item of cartItems) {
+      if (!item.product) continue;
 
-    user.email,
+      if (item.product.stock < item.quantity) {
+        return res.status(400).json({
+          message: `${item.product.title} is out of stock`,
+        });
+      }
+    }
 
-    "Order Confirmed - ZentraCart",
+    if (products.length === 0) {
+      return res.status(400).json({
+        message: "No valid products found in cart",
+      });
+    }
 
-    `Hello ${user.name},
+    // ==========================
+    // COUPON LOGIC
+    // ==========================
+
+    let discountAmount = 0;
+    let finalAmount = totalAmount;
+    let couponCode = "";
+
+    const { coupon } = req.body;
+
+    if (coupon) {
+      const couponData = await Coupon.findOne({
+        code: coupon.toUpperCase(),
+        isActive: true,
+      });
+
+      if (couponData) {
+        if (new Date() <= couponData.expiryDate) {
+          discountAmount = (totalAmount * couponData.discount) / 100;
+
+          finalAmount = totalAmount - discountAmount;
+
+          couponCode = couponData.code;
+        }
+      }
+    }
+
+    // ==========================
+    // CREATE ORDER
+    // ==========================
+
+    const order = await Order.create({
+      user: req.user.id,
+
+      products,
+
+      totalAmount,
+
+      couponCode,
+
+      discountAmount,
+
+      finalAmount,
+    });
+
+    // ==========================
+    // REDUCE STOCK
+    // ==========================
+
+    for (const item of cartItems) {
+      if (!item.product) continue;
+
+      item.product.stock = item.product.stock - item.quantity;
+
+      await item.product.save();
+    }
+
+    const user = await User.findById(req.user.id);
+
+    await sendEmail(
+      user.email,
+
+      "Order Confirmed - ZentraCart",
+
+      `Hello ${user.name},
 
 Your order has been placed successfully.
 
@@ -136,164 +134,173 @@ Total Amount: ₹${order.finalAmount || order.totalAmount}
 
 Status: ${order.orderStatus}
 
-Thank you for shopping with ZentraCart.`
+Thank you for shopping with ZentraCart.`,
+    );
 
-);
+    // ==========================
+    // SAVE NOTIFICATION
+    // ==========================
 
+    await Notification.create({
+      user: req.user.id,
 
-// ==========================
-// SAVE NOTIFICATION
-// ==========================
+      title: "Order Placed",
 
-await Notification.create({
+      message: `Your order #${order._id} has been placed successfully`,
+    });
 
-user:req.user.id,
+    // ==========================
+    // SOCKET NOTIFICATION
+    // ==========================
 
-title:"Order Placed",
+    const io = getIO();
 
-message:`Your order #${order._id} has been placed successfully`
+    io.emit("newOrder", {
+      message: "New Order Placed",
 
-});
+      orderId: order._id,
 
+      totalAmount: order.totalAmount,
+    });
 
-// ==========================
-// SOCKET NOTIFICATION
-// ==========================
+    // ==========================
+    // CLEAR CART
+    // ==========================
 
-const io = getIO();
+    await Cart.deleteMany({
+      user: req.user.id,
+    });
 
-io.emit("newOrder",{
+    // ==========================
+    // RESPONSE
+    // ==========================
 
-message:"New Order Placed",
+    res.status(201).json({
+      message: "Order Created Successfully",
 
-orderId:order._id,
+      order,
+    });
+  } catch (error) {
+    console.log("ORDER ERROR =>", error);
 
-totalAmount:order.totalAmount
-
-});
-
-
-// ==========================
-// CLEAR CART
-// ==========================
-
-await Cart.deleteMany({
-
-user:req.user.id
-
-});
-
-
-// ==========================
-// RESPONSE
-// ==========================
-
-res.status(201).json({
-
-message:"Order Created Successfully",
-
-order
-
-});
-
-
-}
-catch(error){
-
-console.log("ORDER ERROR =>",error);
-
-res.status(500).json({
-
-message:error.message
-
-});
-
-}
-
+    res.status(500).json({
+      message: error.message,
+    });
+  }
 };
-
 
 // ==========================
 // GET MY ORDERS
 // ==========================
 
-exports.getMyOrders = async(req,res)=>{
+exports.getMyOrders = async (req, res) => {
+  try {
+    const orders = await Order.find({
+      user: req.user.id,
+    }).populate("products.product");
 
-try{
+    res.json({
+      count: orders.length,
 
-const orders = await Order.find({
-
-user:req.user.id
-
-})
-.populate("products.product");
-
-
-res.json({
-
-count:orders.length,
-
-orders
-
-});
-
-}
-catch(error){
-
-res.status(500).json({
-
-message:error.message
-
-});
-
-}
-
+      orders,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
 };
-
 
 // ==========================
 // UPDATE ORDER STATUS
 // ==========================
 
-exports.updateOrderStatus = async(req,res)=>{
+exports.updateOrderStatus = async (req, res) => {
+  try {
+    const { orderStatus } = req.body;
 
-try{
+    const order = await Order.findById(req.params.id);
 
-const { orderStatus } = req.body;
+    if (!order) {
+      return res.status(404).json({
+        message: "Order not found",
+      });
+    }
 
-const order = await Order.findById(req.params.id);
+    order.orderStatus = orderStatus;
 
-if(!order){
+    await order.save();
 
-return res.status(404).json({
+    res.json({
+      message: "Order Status Updated",
 
-message:"Order not found"
-
-});
-
-}
-
-order.orderStatus = orderStatus;
-
-await order.save();
-
-res.json({
-
-message:"Order Status Updated",
-
-order
-
-});
-
-}
-catch(error){
-
-res.status(500).json({
-
-message:error.message
-
-});
-
-}
-
+      order,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
 };
+
+exports.cancelOrder = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id)
+      .populate("products.product");
+
+    if (!order) {
+      return res.status(404).json({
+        message: "Order not found",
+      });
+    }
+
+    if (order.user.toString() !== req.user.id) {
+      return res.status(403).json({
+        message: "Unauthorized",
+      });
+    }
+
+    if (
+      order.orderStatus === "shipped" ||
+      order.orderStatus === "delivered"
+    ) {
+      return res.status(400).json({
+        message:
+          "Order cannot be cancelled now",
+      });
+    }
+
+    if (order.orderStatus === "cancelled") {
+      return res.status(400).json({
+        message:
+          "Order already cancelled",
+      });
+    }
+
+    // Restore Stock
+
+    for (const item of order.products) {
+      if (!item.product) continue;
+
+      item.product.stock =
+        item.product.stock + item.quantity;
+
+      await item.product.save();
+    }
+
+    order.orderStatus = "cancelled";
+
+    await order.save();
+
+    res.json({
+      message:
+        "Order Cancelled Successfully",
+      order,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+

@@ -6,40 +6,43 @@ const authMiddleware = require("../middleware/authMiddleware");
 const roleMiddleware = require("../middleware/roleMiddleware");
 
 const {
-
-getSellerOrders,
-getSellerAnalytics
-
+  getSellerOrders,
+  getSellerAnalytics,
+  updateOrderStatus,
+  deleteOrder
 } = require("../controllers/sellerController");
 
-
-
 router.get(
+  "/orders",
 
-"/orders",
+  authMiddleware,
 
-authMiddleware,
+  roleMiddleware("seller"),
 
-roleMiddleware("seller"),
-
-getSellerOrders
-
+  getSellerOrders,
 );
 
-
-
 router.get(
+  "/analytics",
 
-"/analytics",
+  authMiddleware,
 
-authMiddleware,
+  roleMiddleware("seller"),
 
-roleMiddleware("seller"),
-
-getSellerAnalytics
-
+  getSellerAnalytics,
 );
 
-
+router.put(
+  "/orders/:id",
+  authMiddleware,
+  roleMiddleware("seller"),
+  updateOrderStatus,
+);
+router.delete(
+  "/orders/:id",
+  authMiddleware,
+  roleMiddleware("seller"),
+  deleteOrder
+);
 
 module.exports = router;

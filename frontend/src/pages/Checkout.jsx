@@ -43,9 +43,7 @@ function Checkout() {
 
       const res = await API.post(
         "/orders/create",
-        {
-          coupon,
-        },
+        { coupon },
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -74,50 +72,148 @@ function Checkout() {
     <>
       <Navbar />
 
-      <div style={{ padding: "30px" }}>
-        <h1>Checkout</h1>
+      <div className="max-w-7xl mx-auto p-6">
 
-        {cartItems.map((item) => (
-          <div
-            key={item._id}
-            style={{
-              border: "1px solid gray",
-              padding: "15px",
-              marginBottom: "15px",
-            }}
-          >
-            <h3>{item.product.title}</h3>
+        <h1 className="text-4xl font-bold text-[#285570] mb-8">
+          Checkout
+        </h1>
 
-            <p>₹{item.product.price}</p>
+        <div className="grid lg:grid-cols-3 gap-8">
 
-            <p>Qty: {item.quantity}</p>
+          {/* Products */}
+
+          <div className="lg:col-span-2">
+
+            {cartItems.map((item) => (
+              <div
+                key={item._id}
+                className="
+                bg-white
+                border
+                border-[#CBCAC7]
+                rounded-2xl
+                p-5
+                mb-5
+                shadow-sm
+                "
+              >
+                <div className="flex gap-5">
+
+                  {item.product?.images?.[0]
+                    ?.url && (
+                    <img
+                      src={
+                        item.product.images[0]
+                          .url
+                      }
+                      alt={
+                        item.product.title
+                      }
+                      className="
+                      w-28
+                      h-28
+                      object-cover
+                      rounded-xl
+                      "
+                    />
+                  )}
+
+                  <div>
+
+                    <h3 className="text-xl font-semibold">
+                      {item.product.title}
+                    </h3>
+
+                    <p className="text-[#285570] text-2xl font-bold mt-2">
+                      ₹{item.product.price}
+                    </p>
+
+                    <p className="mt-2 text-gray-600">
+                      Quantity: {item.quantity}
+                    </p>
+
+                  </div>
+
+                </div>
+              </div>
+            ))}
+
           </div>
-        ))}
 
-        <h2>Total: ₹{total}</h2>
+          {/* Summary */}
 
-        <br />
+          <div
+            className="
+            bg-white
+            border
+            border-[#CBCAC7]
+            rounded-2xl
+            p-6
+            h-fit
+            shadow-sm
+            "
+          >
+            <h2 className="text-2xl font-bold text-[#285570] mb-6">
+              Order Summary
+            </h2>
 
-        <input
-          type="text"
-          placeholder="Enter Coupon Code"
-          value={coupon}
-          onChange={(e) =>
-            setCoupon(e.target.value)
-          }
-        />
+            <div className="flex justify-between mb-4">
+              <span>Items</span>
 
-        <br />
-        <br />
+              <span>
+                {cartItems.length}
+              </span>
+            </div>
 
-        <button
-          onClick={handlePlaceOrder}
-          disabled={loading}
-        >
-          {loading
-            ? "Placing Order..."
-            : "Place Order"}
-        </button>
+            <div className="flex justify-between mb-6">
+              <span>Total Amount</span>
+
+              <span className="font-bold text-xl text-[#285570]">
+                ₹{total}
+              </span>
+            </div>
+
+            <input
+              type="text"
+              placeholder="Enter Coupon Code"
+              value={coupon}
+              onChange={(e) =>
+                setCoupon(e.target.value)
+              }
+              className="
+                w-full
+                border
+                border-[#CBCAC7]
+                rounded-xl
+                p-3
+                mb-5
+                outline-none
+              "
+            />
+
+            <button
+              onClick={handlePlaceOrder}
+              disabled={loading}
+              className="
+              w-full
+              bg-[#285570]
+              text-white
+              py-4
+              rounded-xl
+              font-semibold
+              hover:bg-[#1E4257]
+              transition
+              disabled:opacity-50
+              "
+            >
+              {loading
+                ? "Placing Order..."
+                : "Place Order"}
+            </button>
+
+          </div>
+
+        </div>
       </div>
     </>
   );

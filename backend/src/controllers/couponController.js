@@ -129,3 +129,29 @@ exports.applyCoupon = async (req, res) => {
     }
 
 };
+
+// ==========================
+// DELETE COUPON
+// ==========================
+
+exports.deleteCoupon = async (req, res) => {
+  try {
+    const coupon = await Coupon.findByIdAndDelete(
+      req.params.id
+    );
+
+    if (!coupon) {
+      return res.status(404).json({
+        message: "Coupon not found",
+      });
+    }
+
+    res.json({
+      message: "Coupon Deleted Successfully",
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};

@@ -10,7 +10,10 @@ const {
 getPendingProducts,
 approveProduct,
 rejectProduct,
-getDashboardStats
+getDashboardStats,
+getAllUsers,
+deleteUser,
+getAllOrders
 
 } = require("../controllers/adminController");
 
@@ -67,5 +70,39 @@ router.get(
     getDashboardStats
 
 );
+
+// ==========================
+// GET ALL USERS
+// ==========================
+
+router.get(
+  "/users",
+  authMiddleware,
+  roleMiddleware("admin"),
+  getAllUsers
+);
+
+// ==========================
+// DELETE USER
+// ==========================
+
+router.delete(
+  "/users/:id",
+  authMiddleware,
+  roleMiddleware("admin"),
+  deleteUser
+);
+
+// ==========================
+// GET ALL ORDERS
+// ==========================
+
+router.get(
+  "/orders",
+  authMiddleware,
+  roleMiddleware("admin"),
+  getAllOrders
+);
+
 
 module.exports = router;

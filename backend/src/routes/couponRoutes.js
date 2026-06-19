@@ -6,48 +6,39 @@ const authMiddleware = require("../middleware/authMiddleware");
 const roleMiddleware = require("../middleware/roleMiddleware");
 
 const {
-
-    createCoupon,
-    getCoupons,
-    applyCoupon
-
+  createCoupon,
+  getCoupons,
+  applyCoupon,
+  deleteCoupon,
 } = require("../controllers/couponController");
-
 
 // Create Coupon (Admin)
 
 router.post(
+  "/",
 
-    "/",
+  authMiddleware,
 
-    authMiddleware,
+  roleMiddleware("admin"),
 
-    roleMiddleware("admin"),
-
-    createCoupon
-
+  createCoupon,
 );
-
 
 // Get Coupons
 
 router.get(
+  "/",
 
-    "/",
-
-    getCoupons
-
+  getCoupons,
 );
-
 
 // Apply Coupon
 
 router.post(
+  "/apply",
 
-    "/apply",
-
-    applyCoupon
-
+  applyCoupon,
 );
+router.delete("/:id", authMiddleware, roleMiddleware("admin"), deleteCoupon);
 
 module.exports = router;
