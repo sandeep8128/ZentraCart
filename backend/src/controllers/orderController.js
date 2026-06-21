@@ -6,13 +6,16 @@ const Coupon = require("../models/Coupon");
 const User = require("../models/User");
 const Product = require("../models/Product");
 const sendEmail = require("../utils/sendEmail");
-
+const PDFDocument = require("pdfkit");
+const Address = require("../models/Address");
 
 // ==========================
 // CREATE ORDER
 // ==========================
 
 exports.createOrder = async (req, res) => {
+  const { coupon, addressId } = req.body;
+
   try {
     const cartItems = await Cart.find({
       user: req.user.id,
@@ -52,6 +55,13 @@ exports.createOrder = async (req, res) => {
           message: `${item.product.title} is out of stock`,
         });
       }
+    }
+    const selectedAddress = await Address.findById(addressId);
+
+    if (!selectedAddress) {
+      return res.status(400).json({
+        message: "Please select delivery address",
+      });
     }
 
     if (products.length === 0) {
@@ -103,6 +113,16 @@ exports.createOrder = async (req, res) => {
       discountAmount,
 
       finalAmount,
+
+      shippingAddress: {
+        fullName: selectedAddress.fullName,
+        phone: selectedAddress.phone,
+        address: selectedAddress.address,
+        city: selectedAddress.city,
+        state: selectedAddress.state,
+        pincode: selectedAddress.pincode,
+        landmark: selectedAddress.landmark,
+      },
     });
 
     // ==========================
@@ -126,15 +146,15 @@ exports.createOrder = async (req, res) => {
 
       `Hello ${user.name},
 
-Your order has been placed successfully.
+       Your order has been placed successfully.
 
-Order ID: ${order._id}
+       Order ID: ${order._id}
 
-Total Amount: ₹${order.finalAmount || order.totalAmount}
+       Total Amount: ₹${order.finalAmount || order.totalAmount}
 
-Status: ${order.orderStatus}
+       Status: ${order.orderStatus}
 
-Thank you for shopping with ZentraCart.`,
+       Thank you for shopping with ZentraCart.`,
     );
 
     // ==========================
@@ -211,6 +231,38 @@ exports.getMyOrders = async (req, res) => {
   }
 };
 
+exports.getSellerOrders = async (req, res) => {
+  try {
+    const orders = await Order.find()
+      .populate("user", "name email")
+      .populate("products.product");
+
+    const sellerOrders = [];
+
+    orders.forEach((order) => {
+      const sellerProducts = order.products.filter(
+        (item) =>
+          item.product && item.product.seller.toString() === req.user.id,
+      );
+
+      if (sellerProducts.length > 0) {
+        sellerOrders.push({
+          ...order.toObject(),
+          products: sellerProducts,
+        });
+      }
+    });
+
+    res.json({
+      count: sellerOrders.length,
+      orders: sellerOrders,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
 // ==========================
 // UPDATE ORDER STATUS
 // ==========================
@@ -245,8 +297,9 @@ exports.updateOrderStatus = async (req, res) => {
 
 exports.cancelOrder = async (req, res) => {
   try {
-    const order = await Order.findById(req.params.id)
-      .populate("products.product");
+    const order = await Order.findById(req.params.id).populate(
+      "products.product",
+    );
 
     if (!order) {
       return res.status(404).json({
@@ -260,20 +313,15 @@ exports.cancelOrder = async (req, res) => {
       });
     }
 
-    if (
-      order.orderStatus === "shipped" ||
-      order.orderStatus === "delivered"
-    ) {
+    if (order.orderStatus === "shipped" || order.orderStatus === "delivered") {
       return res.status(400).json({
-        message:
-          "Order cannot be cancelled now",
+        message: "Order cannot be cancelled now",
       });
     }
 
     if (order.orderStatus === "cancelled") {
       return res.status(400).json({
-        message:
-          "Order already cancelled",
+        message: "Order already cancelled",
       });
     }
 
@@ -282,8 +330,7 @@ exports.cancelOrder = async (req, res) => {
     for (const item of order.products) {
       if (!item.product) continue;
 
-      item.product.stock =
-        item.product.stock + item.quantity;
+      item.product.stock = item.product.stock + item.quantity;
 
       await item.product.save();
     }
@@ -293,8 +340,7 @@ exports.cancelOrder = async (req, res) => {
     await order.save();
 
     res.json({
-      message:
-        "Order Cancelled Successfully",
+      message: "Order Cancelled Successfully",
       order,
     });
   } catch (error) {
@@ -304,3 +350,121 @@ exports.cancelOrder = async (req, res) => {
   }
 };
 
+exports.downloadInvoice = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id)
+      .populate("user", "name email")
+      .populate("products.product", "title price");
+
+    if (!order) {
+      return res.status(404).json({
+        message: "Order not found",
+      });
+    }
+
+    const doc = new PDFDocument();
+
+    res.setHeader("Content-Type", "application/pdf");
+
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=invoice-${order._id}.pdf`,
+    );
+
+    doc.pipe(res);
+
+    doc.fontSize(22).text("ZentraCart Invoice", {
+      align: "center",
+    });
+
+    doc.moveDown();
+
+    doc.fontSize(12).text(`Order ID: ${order._id}`);
+    doc.text(`Customer: ${order.user.name}`);
+    doc.text(`Email: ${order.user.email}`);
+    doc.text(`Status: ${order.orderStatus}`);
+    doc.text(`Date: ${new Date(order.createdAt).toLocaleDateString()}`);
+
+    doc.moveDown();
+
+    doc.text("Products:");
+
+    order.products.forEach((item) => {
+      doc.text(`${item.product.title} x ${item.quantity}`);
+    });
+
+    doc.moveDown();
+
+    doc.text(`Total Amount: ₹${order.totalAmount}`);
+
+    doc.text(`Discount: ₹${order.discountAmount}`);
+
+    doc.text(`Final Amount: ₹${order.finalAmount}`);
+
+    doc.end();
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
+// ==========================
+// DOWNLOAD INVOICE
+// ==========================
+
+exports.downloadInvoice = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id)
+      .populate("user", "name email")
+      .populate("products.product", "title price");
+
+    if (!order) {
+      return res.status(404).json({
+        message: "Order not found",
+      });
+    }
+
+    const doc = new PDFDocument();
+
+    res.setHeader("Content-Type", "application/pdf");
+
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=invoice-${order._id}.pdf`,
+    );
+
+    doc.pipe(res);
+
+    doc.fontSize(22).text("ZentraCart Invoice", {
+      align: "center",
+    });
+
+    doc.moveDown();
+
+    doc.text(`Order ID: ${order._id}`);
+    doc.text(`Customer: ${order.user.name}`);
+    doc.text(`Email: ${order.user.email}`);
+    doc.text(`Status: ${order.orderStatus}`);
+
+    doc.moveDown();
+
+    doc.text("Products:");
+
+    order.products.forEach((item) => {
+      doc.text(`${item.product.title} x ${item.quantity}`);
+    });
+
+    doc.moveDown();
+
+    doc.text(`Total Amount: ₹${order.totalAmount}`);
+    doc.text(`Discount: ₹${order.discountAmount}`);
+    doc.text(`Final Amount: ₹${order.finalAmount}`);
+
+    doc.end();
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};

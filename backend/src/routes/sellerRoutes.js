@@ -9,7 +9,8 @@ const {
   getSellerOrders,
   getSellerAnalytics,
   updateOrderStatus,
-  deleteOrder
+  deleteOrder,
+  getSellerStore,
 } = require("../controllers/sellerController");
 
 router.get(
@@ -42,7 +43,12 @@ router.delete(
   "/orders/:id",
   authMiddleware,
   roleMiddleware("seller"),
-  deleteOrder
+  deleteOrder,
+);
+
+router.get(
+  "/store/:sellerId",
+  getSellerStore
 );
 
 module.exports = router;

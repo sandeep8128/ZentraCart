@@ -3,97 +3,61 @@ const razorpay = require("../config/razorpay");
 const Payment = require("../models/Payment");
 const Order = require("../models/Order");
 
-
 // ==========================
 // CREATE PAYMENT
 // ==========================
 
-exports.createPayment = async(req,res)=>{
+exports.createPayment = async (req, res) => {
+  try {
+    const { orderId, paymentMethod } = req.body;
 
-try{
+    const order = await Order.findById(orderId);
 
-const {
-orderId,
-paymentMethod
-} = req.body;
+    if (!order) {
+      return res.status(404).json({
+        message: "Order not found",
+      });
+    }
 
+    const payment = await Payment.create({
+      order: order._id,
+      user: req.user.id,
+      amount: order.totalAmount,
+      paymentMethod,
+    });
 
-const order = await Order.findById(orderId);
+    res.status(201).json({
+      message: "Payment Created Successfully",
 
-if(!order){
-
-return res.status(404).json({
-message:"Order not found"
-});
-
-}
-
-
-const payment = await Payment.create({
-
-order:order._id,
-user:req.user.id,
-amount:order.totalAmount,
-paymentMethod
-
-});
-
-
-res.status(201).json({
-
-message:"Payment Created Successfully",
-
-payment
-
-});
-
-}
-catch(error){
-
-res.status(500).json({
-message:error.message
-});
-
-}
-
+      payment,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
 };
-
-
-
 
 // ==========================
 // MY PAYMENTS
 // ==========================
 
-exports.getMyPayments = async(req,res)=>{
+exports.getMyPayments = async (req, res) => {
+  try {
+    const payments = await Payment.find({
+      user: req.user.id,
+    }).populate("order");
 
-try{
+    res.json({
+      count: payments.length,
 
-const payments = await Payment.find({
-
-user:req.user.id
-
-})
-.populate("order");
-
-
-res.json({
-
-count:payments.length,
-
-payments
-
-});
-
-}
-catch(error){
-
-res.status(500).json({
-message:error.message
-});
-
-}
-
+      payments,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
 };
 // ==========================
 // CREATE RAZORPAY ORDER
@@ -145,19 +109,14 @@ exports.verifyPayment = async (req, res) => {
       razorpay_signature,
     } = req.body;
 
-    const body =
-      razorpay_order_id + "|" + razorpay_payment_id;
+    const body = razorpay_order_id + "|" + razorpay_payment_id;
 
     const expectedSignature = crypto
-      .createHmac(
-        "sha256",
-        process.env.RAZORPAY_KEY_SECRET
-      )
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
       .update(body)
       .digest("hex");
 
-    const isAuthentic =
-      expectedSignature === razorpay_signature;
+    const isAuthentic = expectedSignature === razorpay_signature;
 
     if (!isAuthentic) {
       return res.status(400).json({
@@ -176,6 +135,10 @@ exports.verifyPayment = async (req, res) => {
       razorpayOrderId: razorpay_order_id,
       razorpayPaymentId: razorpay_payment_id,
     });
+    order.paymentStatus = "paid";
+    order.paymentMethod = "RAZORPAY";
+
+    await order.save();
 
     res.json({
       message: "Payment Successful",

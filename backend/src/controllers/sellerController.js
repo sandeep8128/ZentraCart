@@ -1,3 +1,4 @@
+const User = require("../models/User");
 const Order = require("../models/Order");
 const Product = require("../models/Product");
 const Notification = require("../models/Notification");
@@ -100,7 +101,7 @@ exports.updateOrderStatus = async (req, res) => {
     order.orderStatus = status;
 
     await order.save();
-    
+
     await Notification.create({
       user: order.user,
       title: "Order Status Updated",
@@ -131,6 +132,46 @@ exports.deleteOrder = async (req, res) => {
 
     res.json({
       message: "Order Deleted Successfully",
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
+// ==========================
+// SELLER STORE
+// ==========================
+
+exports.getSellerStore = async (req, res) => {
+  try {
+    const seller = await User.findById(
+      req.params.sellerId
+    ).select("-password");
+
+    if (!seller) {
+      return res.status(404).json({
+        message: "Seller not found",
+      });
+    }
+
+    const products = await Product.find({
+      seller: req.params.sellerId,
+      approvalStatus: "approved",
+    });
+
+    const totalRevenue = products.reduce(
+      (acc, item) =>
+        acc + item.price * item.stock,
+      0
+    );
+
+    res.json({
+      seller,
+      totalProducts: products.length,
+      totalRevenue,
+      products,
     });
   } catch (error) {
     res.status(500).json({

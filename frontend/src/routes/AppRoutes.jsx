@@ -17,33 +17,40 @@ import Notifications from "../pages/Notifications";
 import SellerOrders from "../pages/SellerOrders";
 import Profile from "../pages/Profile";
 import NotFound from "../pages/NotFound";
-
+import ForgotPassword from "../pages/ForgotPassword";
+import ResetPassword from "../pages/ResetPassword";
+import SellerStore from "../pages/SellerStore";
+import AIAssistant from "../pages/AIAssistant";
 
 function AppRoutes() {
   return (
-  <>
-    <Toaster position="top-right" />
+    <>
+      <Toaster position="top-right" />
 
-    <Routes>
-      <Route path="/" element={<Home />} />
-      <Route path="/products" element={<Products />} />
-      <Route path="/cart" element={<Cart />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
-      <Route path="/products/:id" element={<ProductDetails />} />
-      <Route path="/checkout" element={<Checkout />} />
-      <Route path="/dashboard" element={<UserDashboard />} />
-      <Route path="/orders" element={<MyOrders />} />
-      <Route path="/wishlist" element={<Wishlist />} />
-      <Route path="/seller-dashboard" element={<SellerDashboard />} />
-      <Route path="/admin-dashboard" element={<AdminDashboard />} />
-      <Route path="/notifications" element={<Notifications />} />
-      <Route path="/seller-orders" element={<SellerOrders />} />
-      <Route path="/profile" element={<Profile />} />
-      <Route path="*" element={<NotFound />} />
-    </Routes>
-  </>
-);
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/products" element={<Products />} />
+        <Route path="/cart" element={<Cart />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/products/:id" element={<ProductDetails />} />
+        <Route path="/checkout" element={<Checkout />} />
+        <Route path="/dashboard" element={<UserDashboard />} />
+        <Route path="/orders" element={<MyOrders />} />
+        <Route path="/wishlist" element={<Wishlist />} />
+        <Route path="/seller-dashboard" element={<SellerDashboard />} />
+        <Route path="/admin-dashboard" element={<AdminDashboard />} />
+        <Route path="/notifications" element={<Notifications />} />
+        <Route path="/seller-orders" element={<SellerOrders />} />
+        <Route path="/profile" element={<Profile />} />
+        <Route path="*" element={<NotFound />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password/:token" element={<ResetPassword />} />
+        <Route path="/store/:sellerId" element={<SellerStore />} />
+        <Route path="/ai" element={<AIAssistant />} />
+      </Routes>
+    </>
+  );
 }
 
 export default AppRoutes;

@@ -4,36 +4,15 @@ function ProductCard({ product }) {
   const navigate = useNavigate();
 
   return (
-    <div
-      className="
-      bg-white
-      rounded-2xl
-      overflow-hidden
-      shadow-md
-      border
-      border-[#CBCAC7]
-      hover:shadow-2xl
-      hover:-translate-y-2
-      transition-all
-      duration-300
-      cursor-pointer
-      "
-    >
+    <div className="cursor-pointer overflow-hidden rounded-2xl border border-[#CBCAC7] bg-white shadow-md transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl">
       {/* Product Image */}
 
       {product.images?.[0]?.url && (
-        <div className="h-60 overflow-hidden bg-[#FAF7F6]">
+        <div className="flex h-64 items-center justify-center bg-white p-3">
           <img
-            src={product.images[0].url}
+            src={product.images?.[0]?.url}
             alt={product.title}
-            className="
-            w-full
-            h-full
-            object-cover
-            hover:scale-105
-            transition-all
-            duration-500
-            "
+            className="max-h-full w-auto object-contain"
           />
         </div>
       )}
@@ -41,53 +20,22 @@ function ProductCard({ product }) {
       {/* Product Content */}
 
       <div className="p-5">
-        <h3
-          className="
-          text-xl
-          font-bold
-          text-[#333333]
-          mb-2
-          line-clamp-1
-          "
-        >
+        <h3 className="mb-2 line-clamp-1 text-xl font-bold text-[#333333]">
           {product.title}
         </h3>
 
-        <p
-          className="
-          text-gray-500
-          text-sm
-          mb-4
-          line-clamp-2
-          "
-        >
+        <p className="mb-4 line-clamp-2 text-sm text-gray-500">
           {product.description}
         </p>
 
         {/* Price */}
 
-        <div className="flex justify-between items-center mb-4">
-          <span
-            className="
-            text-2xl
-            font-bold
-            text-[#285570]
-            "
-          >
+        <div className="mb-4 flex items-center justify-between">
+          <span className="text-2xl font-bold text-[#285570]">
             ₹{product.price}
           </span>
 
-          <span
-            className="
-            bg-[#E3DED7]
-            text-[#285570]
-            px-3
-            py-1
-            rounded-full
-            text-xs
-            font-semibold
-            "
-          >
+          <span className="rounded-full bg-[#E3DED7] px-3 py-1 text-xs font-semibold text-[#285570]">
             {product.category}
           </span>
         </div>
@@ -95,19 +43,8 @@ function ProductCard({ product }) {
         {/* Button */}
 
         <button
-          onClick={() =>
-            navigate(`/products/${product._id}`)
-          }
-          className="
-          w-full
-          bg-[#285570]
-          text-white
-          py-3
-          rounded-xl
-          font-semibold
-          hover:bg-[#1E4257]
-          transition
-          "
+          onClick={() => navigate(`/products/${product._id}`)}
+          className="w-full rounded-xl bg-[#285570] py-3 font-semibold text-white transition hover:bg-[#1E4257]"
         >
           View Details
         </button>

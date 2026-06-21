@@ -3,8 +3,11 @@ import Navbar from "../components/Navbar";
 import { useState } from "react";
 import API from "../services/api";
 import toast from "react-hot-toast";
+import { loginSuccess } from "../redux/slices/authSlice";
+import { useDispatch } from "react-redux";
 
 function Profile() {
+  const dispatch = useDispatch();
   const { user, token } = useSelector((state) => state.auth);
   const [currentPassword, setCurrentPassword] = useState("");
 
@@ -58,6 +61,38 @@ function Profile() {
       toast.error(error.response?.data?.message || "Update Failed");
     }
   };
+  const handleBecomeSeller = async () => {
+    try {
+      const res = await API.put(
+        "/auth/become-seller",
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      toast.success(res.data.message);
+
+      dispatch(
+        loginSuccess({
+          user: {
+            ...user,
+            role: "seller",
+          },
+          token,
+          role: "seller",
+        }),
+      );
+
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed");
+    }
+  };
 
   return (
     <>
@@ -77,6 +112,14 @@ function Profile() {
             <span className="mt-4 rounded-full bg-[#EBF3F8] px-4 py-2 text-sm font-semibold text-[#285570]">
               {user?.role}
             </span>
+            {user?.role === "user" && (
+              <button
+                onClick={handleBecomeSeller}
+                className="mt-4 rounded-xl bg-green-600 px-5 py-2 text-white hover:bg-green-700"
+              >
+                Become Seller
+              </button>
+            )}
           </div>
 
           <div className="mt-10 grid gap-6 md:grid-cols-2">

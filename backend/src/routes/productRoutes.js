@@ -47,7 +47,7 @@ roleMiddleware("seller"),
     next();
 },
 
-upload.single("image"),
+upload.array("images", 5),
 
 addProduct
 );

@@ -15,6 +15,8 @@ const notificationRoutes = require("./routes/notificationRoutes");
 const reviewRoutes = require("./routes/reviewRoutes");
 const wishlistRoutes = require("./routes/wishlistRoutes");
 const couponRoutes = require("./routes/couponRoutes");
+const aiRoutes = require("./routes/aiRoutes");
+const addressRoutes = require("./routes/addressRoutes");
 
 
 const app = express();
@@ -38,6 +40,8 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/wishlist", wishlistRoutes);
 app.use("/api/coupons", couponRoutes);
+app.use("/api/ai", aiRoutes);
+app.use("/api/address", addressRoutes);
 
 app.get("/",(req,res)=>{
 

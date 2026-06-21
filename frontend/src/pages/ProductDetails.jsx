@@ -1,10 +1,17 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import API from "../services/api";
 import Navbar from "../components/Navbar";
 import ProductCard from "../components/ProductCard";
 import toast from "react-hot-toast";
+import { useDispatch } from "react-redux";
+
+import {
+  increaseCartCount,
+  increaseWishlistCount,
+} from "../redux/slices/cartSlice";
 
 function ProductDetails() {
   const { user, token } = useSelector((state) => state.auth);
@@ -15,6 +22,10 @@ function ProductDetails() {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState("");
   const [relatedProducts, setRelatedProducts] = useState([]);
+  const [selectedImage, setSelectedImage] = useState("");
+  const [reviewImages, setReviewImages] = useState([]);
+  const [zoomStyle, setZoomStyle] = useState({});
+  const dispatch = useDispatch();
 
   // ==========================
   // FETCH PRODUCT
@@ -43,6 +54,11 @@ function ProductDetails() {
       console.log(error.response?.data);
     }
   };
+  useEffect(() => {
+    if (product?.images?.length > 0) {
+      setSelectedImage(product.images[0].url);
+    }
+  }, [product]);
 
   // ==========================
   // FETCH REVIEWS
@@ -82,6 +98,7 @@ function ProductDetails() {
       );
 
       alert("Added To Cart Successfully");
+      dispatch(increaseCartCount());
       console.log(res.data);
     } catch (error) {
       console.log(error.response?.data);
@@ -107,6 +124,8 @@ function ProductDetails() {
       );
 
       toast.success(res.data.message);
+
+      dispatch(increaseWishlistCount());
     } catch (error) {
       console.log(error.response?.data);
 
@@ -120,23 +139,27 @@ function ProductDetails() {
 
   const handleAddReview = async () => {
     try {
-      const res = await API.post(
-        `/reviews/${product._id}`,
-        {
-          rating,
-          comment,
+      const formData = new FormData();
+
+      formData.append("rating", rating);
+      formData.append("comment", comment);
+
+      reviewImages.forEach((img) => {
+        formData.append("images", img);
+      });
+
+      const res = await API.post(`/reviews/${product._id}`, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data",
         },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
+      });
 
       toast.success(res.data.message);
 
       setRating(5);
       setComment("");
+      setReviewImages([]);
 
       fetchReviews();
       fetchProduct();
@@ -185,11 +208,65 @@ function ProductDetails() {
             {/* Image */}
             <div>
               {product.images?.[0]?.url && (
-                <img
-                  src={product.images[0].url}
-                  alt={product.title}
-                  className="max-h-[420px] w-full rounded-xl border border-gray-100 object-cover"
-                />
+                <div className="flex flex-col">
+                  <div className="flex items-center justify-center overflow-hidden rounded-xl border border-gray-100 bg-white p-4">
+                    <img
+                      src={selectedImage || product.images?.[0]?.url}
+                      alt={product.title}
+                      className="max-h-[500px] w-auto object-contain transition-transform duration-100"
+                      style={zoomStyle}
+                      onMouseMove={(e) => {
+                        const { left, top, width, height } =
+                          e.currentTarget.getBoundingClientRect();
+
+                        const x = ((e.clientX - left) / width) * 100;
+                        const y = ((e.clientY - top) / height) * 100;
+
+                        setZoomStyle({
+                          transform: "scale(2)",
+                          transformOrigin: `${x}% ${y}%`,
+                        });
+                      }}
+                      onMouseLeave={() => {
+                        setZoomStyle({
+                          transform: "scale(1)",
+                        });
+                      }}
+                    />
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    {product.images?.map((img, index) => (
+                      <img
+                        key={index}
+                        src={img.url}
+                        alt=""
+                        onClick={() => setSelectedImage(img.url)}
+                        className="h-20 w-20 cursor-pointer rounded-lg border-2 border-gray-200 object-cover hover:border-[#285570]"
+                      />
+                    ))}
+                  </div>
+                  {/* Key Features */}
+                  {product.features?.length > 0 && (
+                    <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                      <h3 className="mb-3 text-lg font-semibold text-[#285570]">
+                        ✨ Key Features
+                      </h3>
+
+                      <ul className="space-y-2">
+                        {product.features.map((feature, index) => (
+                          <li
+                            key={index}
+                            className="flex items-start gap-2 text-sm text-gray-700"
+                          >
+                            <span className="text-green-600">✔</span>
+                            {feature}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
@@ -199,9 +276,7 @@ function ProductDetails() {
                 {product.title}
               </h1>
 
-              <p className="mb-5 text-sm leading-relaxed text-gray-500">
-                {product.description}
-              </p>
+            
 
               <p className="mb-5 text-3xl font-medium text-[#1a2332]">
                 ₹{product.price}
@@ -209,7 +284,12 @@ function ProductDetails() {
 
               <p className="mb-2 text-sm text-gray-500">
                 <span className="font-medium text-gray-800">Seller:</span>{" "}
-                {product.seller?.name}
+                <Link
+                  to={`/store/${product.seller?._id}`}
+                  className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                >
+                  {product.seller?.name} Store
+                </Link>
               </p>
 
               <p className="mb-6 text-sm text-gray-500">
@@ -235,6 +315,18 @@ function ProductDetails() {
                 >
                   ❤️ Wishlist
                 </button>
+              </div>
+
+                <div className=" mt-8 mb-5 " >
+                <h3 className=" mt-10 mb-3 text-lg font-semibold text-gray-900">
+                  Product Description
+                </h3>
+
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <p className="text-sm leading-7 whitespace-pre-line text-gray-600">
+                    {product.description}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -266,6 +358,12 @@ function ProductDetails() {
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             className="mb-3 min-h-[100px] w-full resize-y rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-700 focus:border-[#1a2332] focus:outline-none"
+          />
+          <input
+            type="file"
+            multiple
+            onChange={(e) => setReviewImages([...e.target.files])}
+            className="mb-3 w-full rounded-lg border border-gray-200 p-2"
           />
 
           <button
@@ -306,6 +404,19 @@ function ProductDetails() {
                 </p>
 
                 <p className="text-sm text-gray-600">{review.comment}</p>
+
+                {review.images?.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {review.images.map((img, index) => (
+                      <img
+                        key={index}
+                        src={img.url}
+                        alt="review"
+                        className="h-20 w-20 rounded-lg border object-cover"
+                      />
+                    ))}
+                  </div>
+                )}
 
                 {user?._id === review.user?._id && (
                   <button

@@ -1,5 +1,16 @@
 const Review = require("../models/Review");
 const Product = require("../models/Product");
+const cloudinary = require("../config/cloudinary");
+
+const uploadToCloudinary = async (buffer) => {
+  const base64 = `data:image/jpeg;base64,${buffer.toString("base64")}`;
+
+  const result = await cloudinary.uploader.upload(base64, {
+    folder: "zentracart-reviews",
+  });
+
+  return result;
+};
 
 // ==========================
 // ADD REVIEW
@@ -8,6 +19,17 @@ const Product = require("../models/Product");
 exports.addReview = async (req, res) => {
   try {
     const { rating, comment } = req.body;
+    let images = [];
+
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        const result = await uploadToCloudinary(file.buffer);
+
+        images.push({
+          url: result.secure_url,
+        });
+      }
+    }
 
     const product = await Product.findById(req.params.productId);
 
@@ -33,6 +55,7 @@ exports.addReview = async (req, res) => {
       product: req.params.productId,
       rating,
       comment,
+      images,
     });
 
     // Update Product Rating

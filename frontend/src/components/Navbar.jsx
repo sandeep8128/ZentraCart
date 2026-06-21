@@ -2,15 +2,21 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { logout } from "../redux/slices/authSlice";
-
+import { useEffect } from "react";
+import API from "../services/api";
+import { setCartCount, setWishlistCount } from "../redux/slices/cartSlice";
 
 function Navbar() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const [search, setSearch] = useState("");
+  const { cartCount, wishlistCount } = useSelector((state) => state.cart);
   const { user } = useSelector((state) => state.auth);
 
   const { isAuthenticated, role } = useSelector((state) => state.auth);
+  // const [darkMode, setDarkMode] = useState(
+  //   localStorage.getItem("theme") === "dark",
+  // );
 
   const handleLogout = () => {
     dispatch(logout());
@@ -21,6 +27,51 @@ function Navbar() {
 
     navigate(`/products?keyword=${encodeURIComponent(search)}`);
   };
+
+  // const toggleTheme = () => {
+  //   const newTheme = !darkMode;
+
+  //   setDarkMode(newTheme);
+
+  //   localStorage.setItem("theme", newTheme ? "dark" : "light");
+  // };
+
+  // useEffect(() => {
+  //   if (darkMode) {
+  //     document.documentElement.classList.add("dark");
+  //   } else {
+  //     document.documentElement.classList.remove("dark");
+  //   }
+  // }, [darkMode]);
+
+  const fetchCounts = async () => {
+    try {
+      if (!isAuthenticated) return;
+
+      const [cartRes, wishlistRes] = await Promise.all([
+        API.get("/cart", {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        }),
+
+        API.get("/wishlist", {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        }),
+      ]);
+
+      dispatch(setCartCount(cartRes.data.count || 0));
+
+      dispatch(setWishlistCount(wishlistRes.data.count || 0));
+    } catch (error) {
+      console.log(error.response?.data);
+    }
+  };
+  useEffect(() => {
+    fetchCounts();
+  }, [isAuthenticated]);
 
   return (
     <nav className="sticky top-0 z-50 bg-[#285570] shadow-md">
@@ -68,18 +119,25 @@ function Navbar() {
           </button>
 
           <button
-            onClick={() => navigate("/products")}
-            className="rounded-lg px-4 py-2 text-white transition hover:bg-white/10"
+            onClick={() => navigate("/cart")}
+            className="relative rounded-lg px-4 py-2 text-white transition hover:bg-white/10"
           >
-            Products
+            🛒 Cart
+            {cartCount > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs text-white">
+                {cartCount}
+              </span>
+            )}
           </button>
 
-          <button
-            onClick={() => navigate("/cart")}
-            className="rounded-lg px-4 py-2 text-white transition hover:bg-white/10"
-          >
-            Cart
-          </button>
+          {role === "user" && (
+            <button
+              onClick={() => navigate("/orders")}
+              className="rounded-lg px-4 py-2 text-white transition hover:bg-white/10"
+            >
+              Orders
+            </button>
+          )}
 
           {!isAuthenticated ? (
             <>
@@ -102,9 +160,14 @@ function Navbar() {
               {role === "user" ? (
                 <button
                   onClick={() => navigate("/wishlist")}
-                  className="rounded-lg px-4 py-2 text-white transition hover:bg-white/10"
+                  className="relative rounded-lg px-4 py-2 text-white transition hover:bg-white/10"
                 >
-                  Wishlist
+                  ❤️ Wishlist
+                  {wishlistCount > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs text-white">
+                      {wishlistCount}
+                    </span>
+                  )}
                 </button>
               ) : (
                 <button
@@ -149,6 +212,12 @@ function Navbar() {
               >
                 Logout
               </button>
+              {/* <button
+                onClick={toggleTheme}
+                className="h-12 w-12 rounded-full border-2 border-white text-xl"
+              >
+                {darkMode ? "🌙" : "☀️"}
+              </button> */}
             </>
           )}
         </div>

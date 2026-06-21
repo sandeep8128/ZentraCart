@@ -6,17 +6,13 @@ import toast from "react-hot-toast";
 
 function SellerOrders() {
   const { token } = useSelector((state) => state.auth);
-
   const [orders, setOrders] = useState([]);
 
   const fetchOrders = async () => {
     try {
       const res = await API.get("/seller/orders", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
-
       setOrders(res.data.orders);
     } catch (error) {
       console.log(error.response?.data);
@@ -27,38 +23,25 @@ function SellerOrders() {
     try {
       const res = await API.put(
         `/seller/orders/${orderId}`,
-        {
-          status,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
+        { status },
+        { headers: { Authorization: `Bearer ${token}` } },
       );
-
       toast.success(res.data.message);
-
       fetchOrders();
     } catch (error) {
-      console.log(error.response?.data);
-
-      alert(error.response?.data?.message || "Update Failed");
+      toast.error(error.response?.data?.message || "Update Failed");
     }
   };
+
   const handleDeleteOrder = async (orderId) => {
     try {
       const res = await API.delete(`/seller/orders/${orderId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
-
       toast.success(res.data.message);
-
       fetchOrders();
     } catch (error) {
-      alert(error.response?.data?.message || "Delete Failed");
+      toast.error(error.response?.data?.message || "Delete Failed");
     }
   };
 
@@ -66,142 +49,563 @@ function SellerOrders() {
     fetchOrders();
   }, []);
 
+  const statusConfig = {
+    pending: {
+      label: "Pending",
+      bg: "#FEF3C7",
+      color: "#92400E",
+      dot: "#D97706",
+    },
+    confirmed: {
+      label: "Confirmed",
+      bg: "#DBEAFE",
+      color: "#1E40AF",
+      dot: "#3B82F6",
+    },
+    shipped: {
+      label: "Shipped",
+      bg: "#EDE9FE",
+      color: "#5B21B6",
+      dot: "#7C3AED",
+    },
+    delivered: {
+      label: "Delivered",
+      bg: "#D1FAE5",
+      color: "#065F46",
+      dot: "#10B981",
+    },
+    cancelled: {
+      label: "Cancelled",
+      bg: "#FEE2E2",
+      color: "#991B1B",
+      dot: "#EF4444",
+    },
+  };
+
+  const nextActionConfig = {
+    pending: {
+      label: "Confirm Order",
+      next: "confirmed",
+      bg: "#10B981",
+      hover: "#059669",
+    },
+    confirmed: {
+      label: "Mark Shipped",
+      next: "shipped",
+      bg: "#3B82F6",
+      hover: "#2563EB",
+    },
+    shipped: {
+      label: "Mark Delivered",
+      next: "delivered",
+      bg: "#7C3AED",
+      hover: "#6D28D9",
+    },
+  };
+
   return (
     <>
       <Navbar />
 
-      <div className="mx-auto max-w-7xl p-6">
-        <h1 className="mb-8 text-4xl font-bold text-[#285570]">
-          Seller Orders 📦
-        </h1>
-
-        {orders.length === 0 ? (
-          <div className="rounded-2xl border border-[#CBCAC7] bg-white p-10 text-center">
-            <h3 className="text-2xl text-gray-500">No Orders Found</h3>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {orders.map((order) => (
+      <div
+        style={{ minHeight: "100vh", background: "#f5f6fa", padding: "2rem" }}
+      >
+        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+          {/* Page Header */}
+          <div style={{ marginBottom: "2rem" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                marginBottom: 4,
+              }}
+            >
               <div
-                key={order._id}
-                className="rounded-3xl border border-[#555] bg-[#2E2E2E] p-6 shadow-lg"
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  background: "#EDE9FE",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 18,
+                }}
               >
-                {/* Header */}
-
-                <div className="mb-5 flex items-start justify-between">
-                  <div>
-                    <h3 className="text-xl font-bold text-white">
-                      Order #{order._id.slice(-8)}
-                    </h3>
-
-                    <p className="mt-1 text-sm text-gray-400">
-                      Customer: {order.user?.name}
-                    </p>
-
-                    <p className="text-sm text-gray-400">{order.user?.email}</p>
-                  </div>
-
-                  <span
-                    className={`rounded-full px-4 py-2 text-sm font-semibold ${
-                      order.orderStatus === "delivered"
-                        ? "bg-green-100 text-green-700"
-                        : order.orderStatus === "shipped"
-                          ? "bg-blue-100 text-blue-700"
-                          : order.orderStatus === "cancelled"
-                            ? "bg-red-100 text-red-700"
-                            : "bg-yellow-100 text-yellow-700"
-                    } `}
-                  >
-                    {order.orderStatus}
-                  </span>
-                </div>
-
-                {/* Content */}
-
-                <div className="grid gap-8 md:grid-cols-2">
-                  {/* Products */}
-
-                  <div>
-                    <h4 className="mb-4 font-semibold text-white">Products</h4>
-
-                    <div className="space-y-3">
-                      {order.products.map((item) => (
-                        <div
-                          key={item._id}
-                          className="flex items-center gap-4 rounded-2xl border border-[#444] bg-[#1F1F1F] p-4"
-                        >
-                          <div className="flex items-center gap-4">
-                            {item.product?.images?.[0]?.url && (
-                              <img
-                                src={item.product.images[0].url}
-                                alt={item.product.title}
-                                className="h-16 w-16 rounded-xl border border-[#444] object-cover"
-                              />
-                            )}
-
-                            <div>
-                              <h5 className="font-medium text-white">
-                                {item.product?.title}
-                              </h5>
-
-                              <p className="text-sm text-gray-400">
-                                Qty: {item.quantity}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Summary */}
-
-                  <div className="rounded-2xl border border-[#444] bg-[#333333] p-5">
-                    <h4 className="mb-4 font-semibold text-[#4EA8DE]">
-                      Order Summary
-                    </h4>
-
-                    <div className="mb-4 flex justify-between">
-                      <span className="text-gray-300">Amount</span>
-
-                      <span className="text-xl font-bold text-white">
-                        ₹{order.finalAmount || order.totalAmount}
-                      </span>
-                    </div>
-
-                    <select
-                      value={order.orderStatus}
-                      onChange={(e) => updateStatus(order._id, e.target.value)}
-                      className="mb-4 w-full rounded-xl border border-[#444] bg-[#1F1F1F] px-4 py-3 text-white"
-                    >
-                      <option value="pending">Pending</option>
-
-                      <option value="confirmed">Confirmed</option>
-
-                      <option value="shipped">Shipped</option>
-
-                      <option value="delivered">Delivered</option>
-
-                      <option value="cancelled">Cancelled</option>
-                    </select>
-                    {order.orderStatus === "cancelled" && (
-                      <button
-                        onClick={() => handleDeleteOrder(order._id)}
-                        className="mt-2 rounded-lg bg-red-500 px-4 py-2 text-white hover:bg-red-600"
-                      >
-                        Delete Order
-                      </button>
-                    )}
-
-                    <div className="text-sm text-gray-400">
-                      Update order status directly from the dropdown.
-                    </div>
-                  </div>
-                </div>
+                📦
               </div>
-            ))}
+              <h1
+                style={{
+                  fontSize: 22,
+                  fontWeight: 600,
+                  color: "#111827",
+                  margin: 0,
+                }}
+              >
+                Seller Orders
+              </h1>
+            </div>
+            <p
+              style={{
+                fontSize: 13,
+                color: "#9ca3af",
+                margin: 0,
+                paddingLeft: 48,
+              }}
+            >
+              {orders.length} order{orders.length !== 1 ? "s" : ""} found
+            </p>
           </div>
-        )}
+
+          {/* Empty State */}
+          {orders.length === 0 ? (
+            <div
+              style={{
+                textAlign: "center",
+                padding: "4rem 2rem",
+                background: "#ffffff",
+                borderRadius: 16,
+                border: "1px solid #e5e7eb",
+                boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
+              }}
+            >
+              <div style={{ fontSize: 40, marginBottom: 12 }}>📭</div>
+              <p style={{ color: "#9ca3af", fontSize: 14, margin: 0 }}>
+                No orders found
+              </p>
+            </div>
+          ) : (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "1.25rem",
+              }}
+            >
+              {orders.map((order) => {
+                const status = order.orderStatus;
+                const sc = statusConfig[status] || statusConfig.pending;
+                const na = nextActionConfig[status];
+
+                return (
+                  <div
+                    key={order._id}
+                    style={{
+                      background: "#ffffff",
+                      border: "1px solid #e5e7eb",
+                      borderRadius: 16,
+                      padding: "1.5rem",
+                      position: "relative",
+                      overflow: "hidden",
+                      boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+                    }}
+                  >
+                    {/* Top accent line */}
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        height: 3,
+                        background: sc.dot,
+                        borderRadius: "16px 16px 0 0",
+                      }}
+                    />
+
+                    {/* Order Header */}
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        justifyContent: "space-between",
+                        marginBottom: "1.25rem",
+                        gap: 12,
+                      }}
+                    >
+                      <div>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 10,
+                            marginBottom: 4,
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: 15,
+                              fontWeight: 600,
+                              color: "#111827",
+                            }}
+                          >
+                            Order #{order._id.slice(-8).toUpperCase()}
+                          </span>
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 5,
+                              fontSize: 11,
+                              fontWeight: 500,
+                              padding: "3px 10px",
+                              borderRadius: 20,
+                              background: sc.bg,
+                              color: sc.color,
+                            }}
+                          >
+                            <span
+                              style={{
+                                width: 5,
+                                height: 5,
+                                borderRadius: "50%",
+                                background: sc.dot,
+                                display: "inline-block",
+                              }}
+                            />
+                            {sc.label}
+                          </span>
+                        </div>
+                        <p
+                          style={{ fontSize: 12, color: "#6b7280", margin: 0 }}
+                        >
+                          {order.user?.name} · {order.user?.email}
+                        </p>
+                      </div>
+
+                      {/* Next Action Button */}
+                      {na && (
+                        <button
+                          onClick={() => updateStatus(order._id, na.next)}
+                          style={{
+                            padding: "8px 16px",
+                            borderRadius: 8,
+                            border: "none",
+                            cursor: "pointer",
+                            background: na.bg,
+                            color: "#fff",
+                            fontSize: 12,
+                            fontWeight: 500,
+                            flexShrink: 0,
+                            transition: "background 0.15s",
+                          }}
+                          onMouseOver={(e) =>
+                            (e.currentTarget.style.background = na.hover)
+                          }
+                          onMouseOut={(e) =>
+                            (e.currentTarget.style.background = na.bg)
+                          }
+                        >
+                          {na.label} →
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Body Grid */}
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: "1rem",
+                      }}
+                    >
+                      {/* Products */}
+                      <div>
+                        <p
+                          style={{
+                            fontSize: 11,
+                            color: "#9ca3af",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.07em",
+                            margin: "0 0 10px",
+                            fontWeight: 500,
+                          }}
+                        >
+                          Products
+                        </p>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 8,
+                          }}
+                        >
+                          {order.products.map((item) => (
+                            <div
+                              key={item._id}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 12,
+                                padding: "10px 12px",
+                                background: "#f9fafb",
+                                border: "1px solid #e5e7eb",
+                                borderRadius: 10,
+                              }}
+                            >
+                              {item.product?.images?.[0]?.url && (
+                                <img
+                                  src={item.product.images[0].url}
+                                  alt={item.product.title}
+                                  style={{
+                                    width: 44,
+                                    height: 44,
+                                    borderRadius: 8,
+                                    objectFit: "cover",
+                                    border: "1px solid #e5e7eb",
+                                    flexShrink: 0,
+                                  }}
+                                />
+                              )}
+                              <div>
+                                <p
+                                  style={{
+                                    fontSize: 13,
+                                    fontWeight: 500,
+                                    color: "#111827",
+                                    margin: "0 0 2px",
+                                  }}
+                                >
+                                  {item.product?.title}
+                                </p>
+                                <p
+                                  style={{
+                                    fontSize: 11,
+                                    color: "#9ca3af",
+                                    margin: 0,
+                                  }}
+                                >
+                                  Qty: {item.quantity}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Right Column */}
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "0.75rem",
+                        }}
+                      >
+                        {/* Order Summary */}
+                        <div
+                          style={{
+                            background: "#f9fafb",
+                            border: "1px solid #e5e7eb",
+                            borderRadius: 10,
+                            padding: "14px 16px",
+                          }}
+                        >
+                          <p
+                            style={{
+                              fontSize: 11,
+                              color: "#9ca3af",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.07em",
+                              margin: "0 0 10px",
+                              fontWeight: 500,
+                            }}
+                          >
+                            Order Summary
+                          </p>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              marginBottom: 8,
+                            }}
+                          >
+                            <span style={{ fontSize: 12, color: "#6b7280" }}>
+                              Order Date
+                            </span>
+
+                            <span style={{ fontSize: 12, fontWeight: 500 }}>
+                              {new Date(order.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
+
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              marginBottom: 12,
+                            }}
+                          >
+                            <span style={{ fontSize: 12, color: "#6b7280" }}>
+                              Payment
+                            </span>
+
+                            <span
+                              style={{
+                                fontSize: 12,
+                                fontWeight: 500,
+                                textTransform: "capitalize",
+                              }}
+                            >
+                              {order.paymentStatus}
+                            </span>
+                          </div>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: 12,
+                            }}
+                          >
+                            <span style={{ fontSize: 12, color: "#6b7280" }}>
+                              Total Amount
+                            </span>
+                            <span
+                              style={{
+                                fontSize: 18,
+                                fontWeight: 600,
+                                color: "#111827",
+                              }}
+                            >
+                              ₹{order.finalAmount || order.totalAmount}
+                            </span>
+                          </div>
+
+                          <select
+                            value={order.orderStatus}
+                            onChange={(e) =>
+                              updateStatus(order._id, e.target.value)
+                            }
+                            style={{
+                              width: "100%",
+                              padding: "8px 12px",
+                              borderRadius: 8,
+                              fontSize: 12,
+                              background: "#ffffff",
+                              border: "1px solid #d1d5db",
+                              color: "#111827",
+                              cursor: "pointer",
+                              outline: "none",
+                              marginBottom: status === "cancelled" ? 10 : 0,
+                            }}
+                          >
+                            <option value="pending">Pending</option>
+                            <option value="confirmed">Confirmed</option>
+                            <option value="shipped">Shipped</option>
+                            <option value="delivered">Delivered</option>
+                            <option value="cancelled">Cancelled</option>
+                          </select>
+
+                          {status === "cancelled" && (
+                            <button
+                              onClick={() => handleDeleteOrder(order._id)}
+                              style={{
+                                width: "100%",
+                                padding: "8px",
+                                borderRadius: 8,
+                                border: "1px solid #FCA5A5",
+                                background: "#FEE2E2",
+                                color: "#991B1B",
+                                fontSize: 12,
+                                cursor: "pointer",
+                                fontWeight: 500,
+                                transition: "background 0.15s",
+                              }}
+                              onMouseOver={(e) =>
+                                (e.currentTarget.style.background = "#FECACA")
+                              }
+                              onMouseOut={(e) =>
+                                (e.currentTarget.style.background = "#FEE2E2")
+                              }
+                            >
+                              Delete Order
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Shipping Address */}
+                        {order.shippingAddress && (
+                          <div
+                            style={{
+                              background: "#f9fafb",
+                              border: "1px solid #e5e7eb",
+                              borderRadius: 10,
+                              padding: "14px 16px",
+                            }}
+                          >
+                            <p
+                              style={{
+                                fontSize: 11,
+                                color: "#9ca3af",
+                                textTransform: "uppercase",
+                                letterSpacing: "0.07em",
+                                margin: "0 0 10px",
+                                fontWeight: 500,
+                              }}
+                            >
+                              📍 Delivery Address
+                            </p>
+                            <p
+                              style={{
+                                fontSize: 13,
+                                fontWeight: 600,
+                                color: "#111827",
+                                margin: "0 0 4px",
+                              }}
+                            >
+                              {order.shippingAddress.fullName}
+                            </p>
+                            <p
+                              style={{
+                                fontSize: 12,
+                                color: "#6b7280",
+                                margin: "0 0 2px",
+                              }}
+                            >
+                              {order.shippingAddress.phone}
+                            </p>
+                            <p
+                              style={{
+                                fontSize: 12,
+                                color: "#6b7280",
+                                margin: "0 0 2px",
+                              }}
+                            >
+                              {order.shippingAddress.address}
+                            </p>
+                            <p
+                              style={{
+                                fontSize: 12,
+                                color: "#6b7280",
+                                margin: "0 0 2px",
+                              }}
+                            >
+                              {order.shippingAddress.city},{" "}
+                              {order.shippingAddress.state} —{" "}
+                              {order.shippingAddress.pincode}
+                            </p>
+                            {order.shippingAddress.landmark && (
+                              <p
+                                style={{
+                                  fontSize: 12,
+                                  color: "#9ca3af",
+                                  margin: 0,
+                                }}
+                              >
+                                Near: {order.shippingAddress.landmark}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </>
   );

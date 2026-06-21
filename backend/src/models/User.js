@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 
 const userSchema = new mongoose.Schema({
 
+
 name:{
     type:String,
     required:true
@@ -23,7 +24,17 @@ role:{
     type:String,
     enum:["user","seller","admin"],
     default:"user"
+},
+
+resetPasswordToken:{
+    type:String
+},
+
+resetPasswordExpire:{
+    type:Date
 }
+
+
 
 });
 
