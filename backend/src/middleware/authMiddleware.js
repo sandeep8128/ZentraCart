@@ -33,9 +33,9 @@ const decoded = jwt.verify(
   process.env.JWT_SECRET
 );
 
-console.log("===== AUTH =====");
-console.log("Token:", actualToken);
-console.log("Decoded:", decoded);
+// console.log("===== AUTH =====");
+// console.log("Token:", actualToken);
+// console.log("Decoded:", decoded);
 
 req.user = decoded;
 
