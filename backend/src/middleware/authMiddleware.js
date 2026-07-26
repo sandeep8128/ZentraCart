@@ -29,18 +29,15 @@ const actualToken = token.split(" ")[1];
 
 
 const decoded = jwt.verify(
-
-actualToken,
-
-process.env.JWT_SECRET
-
+  actualToken,
+  process.env.JWT_SECRET
 );
 
-
+console.log("===== AUTH =====");
+console.log("Token:", actualToken);
+console.log("Decoded:", decoded);
 
 req.user = decoded;
-
-
 
 next();
 
