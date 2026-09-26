@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import API from "../services/api";
 import Navbar from "../components/Navbar";
+import { Heart, ShoppingCart, Trash2 } from "lucide-react";
 
 import { decreaseWishlistCount } from "../redux/slices/cartSlice";
 
@@ -91,8 +92,9 @@ function Wishlist() {
           {/* ================= HEADER ================= */}
           <div className="mb-8 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-slate-900 sm:text-4xl">
-                My Wishlist <span className="text-red-500">♥</span>
+              <h1 className="flex items-center gap-2.5 text-3xl font-bold text-slate-900 sm:text-4xl">
+                My Wishlist
+                <Heart className="text-red-500" fill="currentColor" size={26} />
               </h1>
 
               <p className="mt-1 text-sm text-gray-500 sm:text-base">
@@ -133,8 +135,8 @@ function Wishlist() {
             /* ================= EMPTY WISHLIST ================= */
             <div className="flex min-h-[420px] items-center justify-center rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm">
               <div className="max-w-md">
-                <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-gray-100 text-4xl">
-                  ♡
+                <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-gray-100">
+                  <Heart size={34} className="text-gray-300" />
                 </div>
 
                 <h3 className="text-2xl font-bold text-slate-900">
@@ -168,10 +170,21 @@ function Wishlist() {
                       </div>
                     )}
 
+                    {/* Category chip */}
+                    {item.product?.category && (
+                      <span className="absolute top-3 left-3 rounded-full border border-gray-200 bg-white/95 px-2.5 py-1 text-[10.5px] font-semibold tracking-wide text-gray-600 uppercase shadow-sm">
+                        {item.product.category}
+                      </span>
+                    )}
+
                     {/* Wishlist Badge */}
-                    <div className="absolute top-3 right-3 flex h-9 w-9 items-center justify-center rounded-full bg-white text-red-500 shadow-sm">
-                      ♥
-                    </div>
+                    <button
+                      onClick={() => removeWishlist(item.product?._id)}
+                      title="Remove from wishlist"
+                      className="absolute top-3 right-3 flex h-9 w-9 items-center justify-center rounded-full bg-white text-red-500 shadow-sm transition hover:bg-red-50"
+                    >
+                      <Heart size={16} fill="currentColor" />
+                    </button>
                   </div>
 
                   {/* ================= CONTENT ================= */}
@@ -181,7 +194,8 @@ function Wishlist() {
                     </h3>
 
                     <p className="mb-5 text-2xl font-bold text-slate-900">
-                      ₹{item.product?.price ?? 0}
+                      ₹
+                      {Number(item.product?.price ?? 0).toLocaleString("en-IN")}
                     </p>
 
                     {/* ================= ACTIONS ================= */}
@@ -189,16 +203,18 @@ function Wishlist() {
                       <button
                         onClick={() => moveToCart(item.product?._id)}
                         disabled={!item.product?._id}
-                        className="rounded-xl bg-slate-900 px-3 py-3 text-sm font-semibold text-white transition duration-200 hover:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-50 sm:text-base"
+                        className="flex items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-3 py-3 text-sm font-semibold text-white transition duration-200 hover:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-50 sm:text-base"
                       >
+                        <ShoppingCart size={16} />
                         Add To Cart
                       </button>
 
                       <button
                         onClick={() => removeWishlist(item.product?._id)}
                         disabled={!item.product?._id}
-                        className="rounded-xl border border-slate-900 bg-white px-3 py-3 text-sm font-semibold text-slate-900 transition duration-200 hover:border-red-500 hover:bg-red-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-50 sm:text-base"
+                        className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-900 bg-white px-3 py-3 text-sm font-semibold text-slate-900 transition duration-200 hover:border-red-500 hover:bg-red-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-50 sm:text-base"
                       >
+                        <Trash2 size={16} />
                         Remove
                       </button>
                     </div>
