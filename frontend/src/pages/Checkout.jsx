@@ -49,9 +49,9 @@ function Checkout() {
         },
       });
 
-      setCartItems(res.data.cart);
+      setCartItems(res.data.cart || []);
     } catch (error) {
-      console.log(error.response?.data);
+      console.log("CART ERROR:", error.response?.data);
     }
   };
 
@@ -69,7 +69,7 @@ function Checkout() {
 
       setAddresses(res.data.addresses || []);
     } catch (error) {
-      console.log(error.response?.data);
+      console.log("ADDRESS FETCH ERROR:", error.response?.data);
     }
   };
 
@@ -78,16 +78,19 @@ function Checkout() {
   // =====================================================
 
   useEffect(() => {
+    if (!token) return;
+
     fetchCart();
     fetchAddresses();
-  }, []);
+  }, [token]);
 
   // =====================================================
   // TOTAL
   // =====================================================
 
   const total = cartItems.reduce(
-    (sum, item) => sum + item.product.price * item.quantity,
+    (sum, item) =>
+      sum + Number(item.product?.price || 0) * Number(item.quantity || 0),
     0,
   );
 
@@ -121,12 +124,14 @@ function Checkout() {
         },
       );
 
-      console.log(res.data);
+      console.log("ORDER RESPONSE:", res.data);
 
       toast.success("Order placed successfully!");
 
       navigate("/orders");
     } catch (error) {
+      console.log("ORDER ERROR:", error.response?.data);
+
       toast.error(error.response?.data?.message || "Failed to create order");
     } finally {
       setLoading(false);
@@ -138,31 +143,108 @@ function Checkout() {
   // =====================================================
 
   const saveAddress = async () => {
+    const cleanFullName = fullName.trim();
+    const cleanPhone = phone.trim();
+    const cleanAddress = address.trim();
+    const cleanCity = city.trim();
+    const cleanState = stateName.trim();
+    const cleanPincode = pincode.trim();
+    const cleanLandmark = landmark.trim();
+
+    // -----------------------------
+    // VALIDATION
+    // -----------------------------
+
+    if (!cleanFullName) {
+      toast.error("Please enter full name");
+      return;
+    }
+
+    if (!cleanPhone) {
+      toast.error("Please enter phone number");
+      return;
+    }
+
+    if (!/^[0-9]{10}$/.test(cleanPhone)) {
+      toast.error("Please enter a valid 10 digit phone number");
+      return;
+    }
+
+    if (!cleanAddress) {
+      toast.error("Please enter address");
+      return;
+    }
+
+    if (!cleanCity) {
+      toast.error("Please enter city");
+      return;
+    }
+
+    if (!cleanState) {
+      toast.error("Please enter state");
+      return;
+    }
+
+    if (!cleanPincode) {
+      toast.error("Please enter pincode");
+      return;
+    }
+
+    if (!/^[0-9]{6}$/.test(cleanPincode)) {
+      toast.error("Please enter a valid 6 digit pincode");
+      return;
+    }
+
     try {
-      const res = await API.post(
-        "/address/add",
-        {
-          fullName,
-          phone,
-          address,
-          city,
-          state: stateName,
-          pincode,
-          landmark,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
+      // -----------------------------
+      // DEBUG PAYLOAD
+      // -----------------------------
 
-      toast.success(res.data.message);
+      const payload = {
+        fullName: cleanFullName,
+        phone: cleanPhone,
+        address: cleanAddress,
+        city: cleanCity,
+        state: cleanState,
+        pincode: cleanPincode,
+        landmark: cleanLandmark,
+      };
 
-      // Refresh saved addresses
+      console.log("ADDRESS PAYLOAD:", payload);
+
+      // -----------------------------
+      // API
+      // -----------------------------
+
+      const res = await API.post("/address/add", payload, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      console.log("ADDRESS SUCCESS:", res.data);
+
+      toast.success(res.data.message || "Address Added");
+
+      // -----------------------------
+      // REFRESH ADDRESS LIST
+      // -----------------------------
+
       await fetchAddresses();
 
-      // Clear form
+      // -----------------------------
+      // AUTO SELECT NEW ADDRESS
+      // -----------------------------
+
+      if (res.data.address?._id) {
+        setSelectedAddress(res.data.address._id);
+      }
+
+      // -----------------------------
+      // CLEAR FORM
+      // -----------------------------
+
       setFullName("");
       setPhone("");
       setAddress("");
@@ -171,9 +253,9 @@ function Checkout() {
       setPincode("");
       setLandmark("");
     } catch (error) {
-      toast.error("Failed to save address");
+      console.log("ADDRESS ERROR:", error.response?.data);
 
-      console.log(error.response?.data);
+      toast.error(error.response?.data?.message || "Failed to save address");
     }
   };
 
@@ -245,8 +327,6 @@ function Checkout() {
               ================================================= */}
 
               <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:border-slate-300 hover:shadow-[0_16px_40px_-12px_rgba(15,23,42,0.12)]">
-                {/* HEADER */}
-
                 <div className="border-b border-slate-100 px-4 py-4 sm:px-6">
                   <p className="text-[10px] font-bold tracking-[0.18em] text-slate-400 uppercase">
                     Your Items
@@ -257,8 +337,6 @@ function Checkout() {
                     {cartItems.length === 1 ? "item" : "items"} in cart
                   </p>
                 </div>
-
-                {/* ITEMS */}
 
                 <div className="divide-y divide-slate-100 px-4 sm:px-6">
                   {cartItems.map((item) => (
@@ -287,7 +365,7 @@ function Checkout() {
 
                       <div className="min-w-0 flex-1">
                         <h3 className="line-clamp-2 text-xs font-semibold text-slate-800 transition-colors duration-200 group-hover:text-indigo-600 sm:text-sm">
-                          {item.product.title}
+                          {item.product?.title}
                         </h3>
 
                         <p className="mt-1 text-[11px] text-slate-400 sm:text-xs">
@@ -301,20 +379,21 @@ function Checkout() {
                         <p className="text-xs font-bold text-slate-900 sm:text-sm">
                           ₹
                           {Number(
-                            item.product.price * item.quantity,
+                            (item.product?.price || 0) * item.quantity,
                           ).toLocaleString("en-IN")}
                         </p>
 
                         <p className="mt-0.5 text-[10px] text-slate-400 sm:text-xs">
-                          ₹{Number(item.product.price).toLocaleString("en-IN")}{" "}
+                          ₹
+                          {Number(item.product?.price || 0).toLocaleString(
+                            "en-IN",
+                          )}{" "}
                           each
                         </p>
                       </div>
                     </div>
                   ))}
                 </div>
-
-                {/* FREE SHIPPING */}
 
                 {total > 999 && (
                   <div className="mx-4 mb-4 flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5 sm:mx-6">
@@ -339,10 +418,7 @@ function Checkout() {
 
                 <div className="border-b border-slate-100 px-4 py-4 sm:px-6">
                   <div className="flex items-center gap-2">
-                    <MapPin
-                      size={17}
-                      className="text-slate-800 transition-colors hover:text-indigo-600"
-                    />
+                    <MapPin size={17} className="text-slate-800" />
 
                     <div>
                       <p className="text-[10px] font-bold tracking-[0.18em] text-slate-400 uppercase">
@@ -356,7 +432,7 @@ function Checkout() {
                   </div>
                 </div>
 
-                {/* ADDRESS FORM */}
+                {/* FORM */}
 
                 <div className="space-y-3 p-4 sm:p-6">
                   {/* NAME + PHONE */}
@@ -371,10 +447,16 @@ function Checkout() {
                     />
 
                     <input
-                      type="text"
+                      type="tel"
+                      inputMode="numeric"
+                      maxLength={10}
                       placeholder="Phone number"
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, "");
+
+                        setPhone(value);
+                      }}
                       className={inputCls}
                     />
                   </div>
@@ -389,7 +471,7 @@ function Checkout() {
                     className={`${inputCls} resize-none`}
                   />
 
-                  {/* CITY STATE PINCODE */}
+                  {/* CITY / STATE / PINCODE */}
 
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <input
@@ -409,10 +491,16 @@ function Checkout() {
                     />
 
                     <input
-                      type="text"
+                      type="tel"
+                      inputMode="numeric"
+                      maxLength={6}
                       placeholder="Pincode"
                       value={pincode}
-                      onChange={(e) => setPincode(e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, "");
+
+                        setPincode(value);
+                      }}
                       className={inputCls}
                     />
                   </div>
@@ -427,10 +515,11 @@ function Checkout() {
                     className={inputCls}
                   />
 
-                  {/* SAVE */}
+                  {/* SAVE ADDRESS */}
 
                   <div className="pt-1">
                     <button
+                      type="button"
                       onClick={saveAddress}
                       className="w-full rounded-xl border border-slate-900 bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition-all duration-300 hover:border-indigo-600 hover:bg-indigo-600 hover:shadow-lg hover:shadow-indigo-100 active:scale-[0.98] sm:w-auto"
                     >
@@ -484,6 +573,12 @@ function Checkout() {
                                 <p className="mt-1 text-slate-500">
                                   {item.phone}
                                 </p>
+
+                                {item.pincode && (
+                                  <p className="mt-1 text-xs text-slate-400">
+                                    PIN: {item.pincode}
+                                  </p>
+                                )}
                               </div>
                             </div>
                           </label>
@@ -501,14 +596,11 @@ function Checkout() {
 
             <div className="h-fit space-y-4 lg:sticky lg:top-20">
               <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:border-slate-300 hover:shadow-[0_16px_40px_-12px_rgba(15,23,42,0.15)]">
-                {/* SUMMARY HEADER */}
+                {/* HEADER */}
 
                 <div className="border-b border-slate-100 px-5 py-4 sm:px-6">
                   <div className="flex items-center gap-2">
-                    <CreditCard
-                      size={17}
-                      className="text-slate-800 transition-colors hover:text-indigo-600"
-                    />
+                    <CreditCard size={17} className="text-slate-800" />
 
                     <div>
                       <p className="text-[10px] font-bold tracking-[0.18em] text-slate-400 uppercase">
@@ -523,7 +615,7 @@ function Checkout() {
                 </div>
 
                 <div className="p-5 sm:p-6">
-                  {/* LINE ITEMS */}
+                  {/* SUBTOTAL */}
 
                   <div className="space-y-3">
                     <div className="flex items-center justify-between gap-3">
@@ -535,6 +627,8 @@ function Checkout() {
                         ₹{Number(total).toLocaleString("en-IN")}
                       </span>
                     </div>
+
+                    {/* SHIPPING */}
 
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-slate-500">Shipping</span>
@@ -565,9 +659,7 @@ function Checkout() {
                     </span>
                   </div>
 
-                  {/* =================================================
-                      COUPON
-                  ================================================= */}
+                  {/* COUPON */}
 
                   <div className="mt-5">
                     <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-slate-500">
@@ -582,13 +674,13 @@ function Checkout() {
                         value={coupon}
                         onChange={(e) => {
                           setCoupon(e.target.value);
-
                           setCouponApplied(false);
                         }}
-                        className={`flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm transition-all outline-none placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-100`}
+                        className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm transition-all outline-none placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-100"
                       />
 
                       <button
+                        type="button"
                         onClick={() => setCouponApplied(true)}
                         className="rounded-xl border border-slate-900 bg-slate-900 px-5 py-3 text-xs font-semibold text-white transition-all duration-300 hover:border-indigo-600 hover:bg-indigo-600 active:scale-[0.98]"
                       >
@@ -603,11 +695,10 @@ function Checkout() {
                     )}
                   </div>
 
-                  {/* =================================================
-                      PLACE ORDER
-                  ================================================= */}
+                  {/* PLACE ORDER */}
 
                   <button
+                    type="button"
                     onClick={handlePlaceOrder}
                     disabled={loading}
                     className="mt-5 flex min-h-[50px] w-full items-center justify-center rounded-xl bg-slate-900 py-3.5 text-sm font-semibold text-white shadow-sm transition-all duration-300 hover:bg-indigo-600 hover:shadow-lg hover:shadow-indigo-100 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
