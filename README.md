@@ -28,6 +28,11 @@ Features:
 - User assistance
 - Smart recommendations
 - Interactive chatbot experience
+- 📍 30 KM Location-Based Delivery
+- Nearby seller discovery based on customer location
+- Haversine-based distance calculation
+- Optional customer and seller location support
+- Server-side 30 KM delivery validation
 
 ### 👤 Authentication & Authorization
 - User Registration & Login
