@@ -13,28 +13,24 @@ const statusConfig = {
     border: "border-emerald-200",
     dot: "bg-emerald-500",
   },
-
   shipped: {
     bg: "bg-blue-50",
     text: "text-blue-700",
     border: "border-blue-200",
     dot: "bg-blue-500",
   },
-
   confirmed: {
     bg: "bg-violet-50",
     text: "text-violet-700",
     border: "border-violet-200",
     dot: "bg-violet-500",
   },
-
   cancelled: {
     bg: "bg-red-50",
     text: "text-red-700",
     border: "border-red-200",
     dot: "bg-red-500",
   },
-
   pending: {
     bg: "bg-amber-50",
     text: "text-amber-700",
@@ -45,15 +41,20 @@ const statusConfig = {
 
 const trackingMessage = {
   pending: "Order received and waiting for seller confirmation.",
-
   confirmed: "Seller confirmed your order and is preparing shipment.",
-
   shipped: "Package is on the way to your delivery address.",
-
   delivered: "Package delivered successfully. Enjoy your purchase!",
-
   cancelled: "This order has been cancelled.",
 };
+
+const formatDate = (date) =>
+  new Date(date).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+
+const formatPrice = (value) => `₹${Number(value).toLocaleString("en-IN")}`;
 
 // =====================================================
 // STATUS BADGE
@@ -64,10 +65,9 @@ function StatusBadge({ status }) {
 
   return (
     <span
-      className={`inline-flex max-w-full shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold capitalize sm:px-3 sm:text-xs ${cfg.bg} ${cfg.text} ${cfg.border}`}
+      className={`inline-flex max-w-full shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold capitalize ${cfg.bg} ${cfg.text} ${cfg.border}`}
     >
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${cfg.dot}`} />
-
       <span className="truncate">{status}</span>
     </span>
   );
@@ -90,7 +90,6 @@ function TrackingBar({ status }) {
           return (
             <div key={step} className="relative min-w-0">
               {/* CONNECTOR */}
-
               {index < STATUS_STEPS.length - 1 && (
                 <div
                   className={`absolute top-3.5 right-0 left-1/2 h-0.5 sm:top-4 ${
@@ -100,10 +99,9 @@ function TrackingBar({ status }) {
               )}
 
               {/* STEP */}
-
               <div className="relative z-10 flex min-w-0 flex-col items-center">
                 <div
-                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-[9px] font-bold transition-all duration-300 sm:h-8 sm:w-8 sm:text-[10px] ${
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-[10px] font-bold transition-all duration-300 sm:h-8 sm:w-8 ${
                     done
                       ? "border-slate-900 bg-slate-900 text-white"
                       : "border-slate-200 bg-white text-slate-300"
@@ -128,8 +126,9 @@ function TrackingBar({ status }) {
                   )}
                 </div>
 
+                {/* label wraps instead of truncating, small font on tiny screens */}
                 <span
-                  className={`mt-1.5 max-w-full truncate px-0.5 text-center text-[8px] font-medium capitalize sm:text-[10px] ${
+                  className={`mt-1.5 w-full text-center text-[9px] leading-tight font-medium break-words capitalize sm:text-xs ${
                     done ? "text-slate-800" : "text-slate-400"
                   }`}
                 >
@@ -140,6 +139,23 @@ function TrackingBar({ status }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// =====================================================
+// SUMMARY ROW
+// =====================================================
+
+function SummaryRow({ label, value, valueClass = "text-slate-700" }) {
+  return (
+    <div className="flex min-w-0 items-start justify-between gap-3">
+      <span className="min-w-0 text-xs text-slate-500 sm:text-sm">{label}</span>
+      <span
+        className={`min-w-0 text-right text-xs font-medium break-words capitalize sm:text-sm ${valueClass}`}
+      >
+        {value}
+      </span>
     </div>
   );
 }
@@ -159,64 +175,50 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
     order.orderStatus,
   );
 
+  const canPay =
+    order.orderStatus !== "cancelled" &&
+    String(order.paymentStatus || "").toLowerCase() !== "paid";
+
   return (
     <div className="box-border w-full max-w-full min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:border-slate-300 hover:shadow-[0_16px_40px_-12px_rgba(15,23,42,0.14)]">
-      {/* =================================================
-          CARD HEADER
-      ================================================= */}
-
-      <div className="box-border w-full min-w-0 border-b border-slate-100 bg-slate-50/60 px-3 py-3 sm:px-6 sm:py-4">
-        <div className="flex min-w-0 flex-col gap-3 sm:gap-4">
+      {/* ================= HEADER ================= */}
+      <div className="box-border w-full min-w-0 border-b border-slate-100 bg-slate-50/60 px-4 py-4 sm:px-6">
+        <div className="flex min-w-0 flex-col gap-4">
           {/* ORDER INFO */}
-
-          <div className="grid min-w-0 grid-cols-3 gap-2 sm:flex sm:items-center sm:gap-4">
-            {/* ORDER ID */}
-
+          <div className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-3 sm:flex sm:items-center sm:gap-5">
             <div className="min-w-0">
-              <p className="truncate text-[8px] font-semibold tracking-[0.14em] text-slate-400 uppercase sm:text-[10px] sm:tracking-[0.18em]">
+              <p className="truncate text-[10px] font-semibold tracking-[0.14em] text-slate-400 uppercase sm:tracking-[0.18em]">
                 Order
               </p>
-
-              <h3 className="mt-0.5 truncate font-mono text-[10px] font-semibold text-slate-800 sm:text-sm">
+              <h3 className="mt-0.5 truncate font-mono text-xs font-semibold text-slate-800 sm:text-sm">
                 #{order._id.slice(-8).toUpperCase()}
               </h3>
             </div>
 
             <div className="hidden h-8 w-px bg-slate-200 sm:block" />
 
-            {/* DATE */}
-
             <div className="min-w-0">
-              <p className="truncate text-[8px] font-semibold tracking-[0.14em] text-slate-400 uppercase sm:text-[10px] sm:tracking-[0.18em]">
-                Placed
+              <p className="truncate text-[10px] font-semibold tracking-[0.14em] text-slate-400 uppercase sm:tracking-[0.18em]">
+                Placed on
               </p>
-
-              <p className="mt-0.5 truncate text-[10px] font-medium text-slate-700 sm:text-sm">
-                {new Date(order.createdAt).toLocaleDateString("en-IN", {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                })}
+              <p className="mt-0.5 truncate text-xs font-medium text-slate-700 sm:text-sm">
+                {formatDate(order.createdAt)}
               </p>
             </div>
 
             <div className="hidden h-8 w-px bg-slate-200 sm:block" />
 
-            {/* TOTAL */}
-
-            <div className="min-w-0">
-              <p className="truncate text-[8px] font-semibold tracking-[0.14em] text-slate-400 uppercase sm:text-[10px] sm:tracking-[0.18em]">
+            <div className="col-span-2 min-w-0 sm:col-span-1">
+              <p className="truncate text-[10px] font-semibold tracking-[0.14em] text-slate-400 uppercase sm:tracking-[0.18em]">
                 Total
               </p>
-
-              <p className="mt-0.5 truncate text-[10px] font-bold text-slate-900 sm:text-sm">
-                ₹{Number(order.finalAmount).toLocaleString("en-IN")}
+              <p className="mt-0.5 truncate text-sm font-bold text-slate-900">
+                {formatPrice(order.finalAmount)}
               </p>
             </div>
           </div>
 
           {/* STATUS + TOGGLE */}
-
           <div className="flex min-w-0 items-center justify-between gap-2">
             <StatusBadge status={order.orderStatus} />
 
@@ -224,7 +226,7 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
               type="button"
               onClick={() => setExpanded(!expanded)}
               aria-label={expanded ? "Collapse order" : "Expand order"}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 transition-all duration-200 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 transition-all duration-200 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"
             >
               <svg
                 className={`h-4 w-4 transition-transform duration-200 ${
@@ -246,38 +248,32 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
         </div>
       </div>
 
-      {/* =================================================
-          EXPANDED BODY
-      ================================================= */}
-
+      {/* ================= BODY ================= */}
       {expanded && (
-        <div className="box-border w-full max-w-full min-w-0 p-3 sm:p-6">
-          <div className="grid w-full max-w-full min-w-0 gap-5 lg:grid-cols-5 lg:gap-6">
-            {/* =================================================
-                PRODUCTS
-            ================================================= */}
-
-            <div className="max-w-full min-w-0 lg:col-span-3">
+        <div className="box-border w-full max-w-full min-w-0 p-4 sm:p-6">
+          {/* grid-cols-1 = minmax(0,1fr): column can never be wider than the card */}
+          <div className="grid w-full max-w-full min-w-0 grid-cols-1 gap-6 lg:grid-cols-5">
+            {/* ---------- PRODUCTS + TRACKING ---------- */}
+            <div className="min-w-0 lg:col-span-3">
               <p className="mb-3 text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase">
                 Items
               </p>
 
-              <div className="w-full max-w-full min-w-0 space-y-2">
+              <div className="w-full min-w-0 space-y-2">
                 {order.products.map((item) => (
                   <div
                     key={item._id}
-                    className="flex max-w-full min-w-0 items-center gap-2 overflow-hidden rounded-xl border border-slate-100 bg-slate-50 p-2.5 transition-all duration-200 hover:border-indigo-100 hover:bg-indigo-50/30 sm:gap-3 sm:p-3"
+                    className="flex w-full min-w-0 items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-2.5 transition-all duration-200 hover:border-indigo-100 hover:bg-indigo-50/30 sm:p-3"
                   >
                     {/* IMAGE */}
-
                     {item.product?.images?.[0]?.url ? (
                       <img
                         src={item.product.images[0].url}
                         alt={item.product.title}
-                        className="h-12 w-12 shrink-0 rounded-lg bg-white object-contain p-1 sm:h-16 sm:w-16"
+                        className="h-14 w-14 shrink-0 rounded-lg bg-white object-contain p-1 sm:h-16 sm:w-16"
                       />
                     ) : (
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-slate-400 sm:h-16 sm:w-16">
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-slate-400 sm:h-16 sm:w-16">
                         <svg
                           className="h-6 w-6"
                           fill="none"
@@ -294,109 +290,75 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
                       </div>
                     )}
 
-                    {/* NAME */}
-
-                    <div className="min-w-0 flex-1 overflow-hidden">
-                      <p className="line-clamp-2 text-[11px] leading-4 font-semibold break-words text-slate-800 sm:text-sm">
+                    {/* NAME + QTY + (price on mobile) */}
+                    <div className="min-w-0 flex-1">
+                      <p className="line-clamp-2 text-xs leading-4 font-semibold break-words text-slate-800 sm:text-sm sm:leading-5">
                         {item.product?.title}
                       </p>
 
-                      <p className="mt-1 text-[10px] text-slate-400 sm:text-xs">
+                      <p className="mt-1 text-[11px] text-slate-400 sm:text-xs">
                         Qty: {item.quantity}
                       </p>
+
+                      {item.product?.price && (
+                        <p className="mt-1 text-xs font-bold whitespace-nowrap text-slate-800 sm:hidden">
+                          {formatPrice(item.product.price)}
+                        </p>
+                      )}
                     </div>
 
-                    {/* PRICE */}
-
+                    {/* PRICE (tablet / desktop) */}
                     {item.product?.price && (
-                      <p className="max-w-[65px] shrink-0 truncate text-right text-[10px] font-bold text-slate-800 sm:max-w-none sm:text-sm">
-                        ₹{Number(item.product.price).toLocaleString("en-IN")}
+                      <p className="hidden shrink-0 text-right text-sm font-bold whitespace-nowrap text-slate-800 sm:block">
+                        {formatPrice(item.product.price)}
                       </p>
                     )}
                   </div>
                 ))}
               </div>
 
-              {/* =================================================
-                  TRACKING
-              ================================================= */}
-
+              {/* TRACKING */}
               {order.orderStatus !== "cancelled" && (
                 <div className="mt-6 min-w-0">
                   <p className="mb-4 text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase">
                     Tracking
                   </p>
-
                   <TrackingBar status={order.orderStatus} />
                 </div>
               )}
             </div>
 
-            {/* =================================================
-                SUMMARY
-            ================================================= */}
-
-            <div className="max-w-full min-w-0 lg:col-span-2">
+            {/* ---------- SUMMARY + ACTIONS ---------- */}
+            <div className="min-w-0 lg:col-span-2">
               <p className="mb-3 text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase">
                 Summary
               </p>
 
-              <div className="box-border w-full max-w-full min-w-0 rounded-xl border border-slate-100 bg-slate-50 p-3 sm:p-4">
+              <div className="box-border w-full min-w-0 rounded-xl border border-slate-100 bg-slate-50 p-3 sm:p-4">
                 <div className="w-full min-w-0 space-y-3">
-                  {/* ORDER DATE */}
+                  <SummaryRow
+                    label="Order date"
+                    value={formatDate(order.createdAt)}
+                  />
 
-                  <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-                    <span className="min-w-0 text-xs break-words text-slate-500">
-                      Order date
-                    </span>
+                  <SummaryRow
+                    label="Expected delivery"
+                    value={formatDate(deliveryDate)}
+                    valueClass="text-emerald-600"
+                  />
 
-                    <span className="max-w-full text-right text-[10px] font-medium text-slate-700 sm:text-xs">
-                      {new Date(order.createdAt).toLocaleDateString("en-IN", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </span>
-                  </div>
-
-                  {/* DELIVERY */}
-
-                  <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-                    <span className="min-w-0 text-xs break-words text-slate-500">
-                      Expected delivery
-                    </span>
-
-                    <span className="max-w-full text-right text-[10px] font-medium text-emerald-600 sm:text-xs">
-                      {deliveryDate.toLocaleDateString("en-IN", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </span>
-                  </div>
-
-                  {/* PAYMENT */}
-
-                  <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-                    <span className="min-w-0 text-xs break-words text-slate-500">
-                      Payment status
-                    </span>
-
-                    <span className="max-w-[110px] truncate text-right text-[10px] font-medium text-slate-700 capitalize sm:text-xs">
-                      {order.paymentStatus || "Pending"}
-                    </span>
-                  </div>
-
-                  {/* TOTAL */}
+                  <SummaryRow
+                    label="Payment status"
+                    value={order.paymentStatus || "Pending"}
+                  />
 
                   <div className="border-t border-slate-200 pt-3">
-                    <div className="flex min-w-0 items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center justify-between gap-3">
                       <span className="shrink-0 text-sm font-semibold text-slate-700">
                         Total
                       </span>
-
-                      <span className="min-w-0 truncate text-right text-base font-extrabold text-slate-900 sm:text-xl">
-                        ₹{Number(order.finalAmount).toLocaleString("en-IN")}
+                      <span className="min-w-0 text-right text-lg font-extrabold break-words text-slate-900 sm:text-xl">
+                        {formatPrice(order.finalAmount)}
                       </span>
                     </div>
                   </div>
@@ -404,9 +366,8 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
               </div>
 
               {/* TRACKING MESSAGE */}
-
               <div
-                className={`mt-3 box-border w-full max-w-full min-w-0 rounded-xl border p-3 ${
+                className={`mt-3 box-border w-full min-w-0 rounded-xl border p-3 ${
                   order.orderStatus === "cancelled"
                     ? "border-red-100 bg-red-50"
                     : "border-indigo-100 bg-indigo-50/50"
@@ -425,9 +386,8 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
               </div>
 
               {/* DELIVERY ADDRESS */}
-
               {order.shippingAddress && (
-                <div className="mt-5 box-border w-full max-w-full min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4">
+                <div className="mt-5 box-border w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4">
                   <h4 className="mb-3 text-sm font-semibold text-slate-800">
                     📍 Delivery Address
                   </h4>
@@ -460,22 +420,17 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
                 </div>
               )}
 
-              {/* =================================================
-                  ACTIONS
-              ================================================= */}
-
+              {/* ACTIONS */}
               <div className="mt-4 grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1">
-                {/* PAY */}
-
-                <button
-                  type="button"
-                  onClick={() => onPay(order)}
-                  className="w-full min-w-0 rounded-xl bg-slate-900 px-3 py-3 text-sm font-semibold text-white transition-all duration-300 hover:bg-indigo-600 hover:shadow-lg hover:shadow-indigo-100 active:scale-[0.98]"
-                >
-                  Pay Now
-                </button>
-
-                {/* INVOICE */}
+                {canPay && (
+                  <button
+                    type="button"
+                    onClick={() => onPay(order)}
+                    className="w-full min-w-0 rounded-xl bg-slate-900 px-3 py-3 text-sm font-semibold text-white transition-all duration-300 hover:bg-indigo-600 hover:shadow-lg hover:shadow-indigo-100 active:scale-[0.98]"
+                  >
+                    Pay Now
+                  </button>
+                )}
 
                 <button
                   type="button"
@@ -495,11 +450,8 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
                       d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                     />
                   </svg>
-
                   <span className="truncate">Download Invoice</span>
                 </button>
-
-                {/* CANCEL */}
 
                 {canCancel && (
                   <button
@@ -510,8 +462,6 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
                     Cancel Order
                   </button>
                 )}
-
-                {/* DELETE */}
 
                 {order.orderStatus === "cancelled" && (
                   <button
@@ -541,94 +491,66 @@ function MyOrders() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // =====================================================
-  // FETCH ORDERS
-  // =====================================================
+  const authHeaders = { Authorization: `Bearer ${token}` };
 
+  // FETCH ORDERS
   const fetchOrders = async () => {
     try {
       setLoading(true);
 
       const res = await API.get("/orders/my-orders", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: authHeaders,
       });
 
       setOrders(res.data.orders || []);
     } catch (error) {
       console.log(error.response?.data);
-
       toast.error(error.response?.data?.message || "Failed to load orders");
     } finally {
       setLoading(false);
     }
   };
 
-  // =====================================================
   // DOWNLOAD INVOICE
-  // =====================================================
-
   const handleDownloadInvoice = async (orderId) => {
     try {
       const response = await API.get(`/orders/invoice/${orderId}`, {
         responseType: "blob",
-
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: authHeaders,
       });
 
       const url = window.URL.createObjectURL(new Blob([response.data]));
-
       const link = document.createElement("a");
 
       link.href = url;
-
       link.setAttribute("download", `invoice-${orderId}.pdf`);
-
       document.body.appendChild(link);
-
       link.click();
-
       link.remove();
-
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.log(error.response?.data);
-
       toast.error("Failed to download invoice");
     }
   };
 
-  // =====================================================
   // CANCEL ORDER
-  // =====================================================
-
   const handleCancelOrder = async (orderId) => {
     try {
       const res = await API.put(
         `/orders/cancel/${orderId}`,
         {},
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
+        { headers: authHeaders },
       );
 
       toast.success(res.data.message);
-
       fetchOrders();
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to cancel order");
     }
   };
 
-  // =====================================================
   // DELETE CANCELLED ORDER
-  // =====================================================
-
   const handleDeleteOrder = async (orderId) => {
     const confirmed = window.confirm(
       "Are you sure you want to permanently delete this cancelled order?",
@@ -638,9 +560,7 @@ function MyOrders() {
 
     try {
       const res = await API.delete(`/orders/delete/${orderId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: authHeaders,
       });
 
       toast.success(res.data.message || "Order deleted successfully");
@@ -653,35 +573,21 @@ function MyOrders() {
     }
   };
 
-  // =====================================================
   // RAZORPAY
-  // =====================================================
-
   const handleRazorpay = async (order) => {
     try {
       const { data } = await API.post(
         "/payment/create-order",
-        {
-          orderId: order._id,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
+        { orderId: order._id },
+        { headers: authHeaders },
       );
 
       const options = {
         key: data.key,
-
         amount: data.razorpayOrder.amount,
-
         currency: "INR",
-
         name: "ZentraCart",
-
         description: "Order Payment",
-
         order_id: data.razorpayOrder.id,
 
         prefill: {
@@ -696,22 +602,14 @@ function MyOrders() {
               "/payment/verify",
               {
                 orderId: order._id,
-
                 razorpay_order_id: response.razorpay_order_id,
-
                 razorpay_payment_id: response.razorpay_payment_id,
-
                 razorpay_signature: response.razorpay_signature,
               },
-              {
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                },
-              },
+              { headers: authHeaders },
             );
 
             toast.success(verifyRes.data.message);
-
             fetchOrders();
           } catch (error) {
             toast.error(
@@ -720,14 +618,11 @@ function MyOrders() {
           }
         },
 
-        theme: {
-          color: "#285570",
-        },
+        theme: { color: "#285570" },
       };
 
       if (!window.Razorpay) {
         toast.error("Razorpay is not loaded.");
-
         return;
       }
 
@@ -748,18 +643,15 @@ function MyOrders() {
       <Navbar />
 
       <main className="min-h-screen w-full max-w-full min-w-0 overflow-x-hidden bg-gray-50">
-        <div className="mx-auto box-border w-full max-w-6xl min-w-0 px-3 py-6 sm:px-4 sm:py-8 md:px-6 md:py-10">
-          {/* =================================================
-              PAGE HEADER
-          ================================================= */}
-
-          <div className="mb-6 flex min-w-0 flex-col gap-4 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
+        <div className="mx-auto box-border w-full max-w-6xl min-w-0 px-4 py-6 sm:px-6 sm:py-8 md:py-10">
+          {/* PAGE HEADER */}
+          <div className="mb-6 flex min-w-0 flex-col gap-3 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold tracking-widest text-gray-400 uppercase sm:text-[11px]">
+              <p className="text-[11px] font-semibold tracking-widest text-gray-400 uppercase">
                 ZentraCart
               </p>
 
-              <h1 className="mt-1 truncate text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
+              <h1 className="mt-1 text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
                 My Orders
               </h1>
 
@@ -775,22 +667,16 @@ function MyOrders() {
             )}
           </div>
 
-          {/* =================================================
-              LOADING
-          ================================================= */}
-
+          {/* LOADING */}
           {loading && (
             <div className="flex min-h-[300px] items-center justify-center">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#285570] border-t-transparent" />
             </div>
           )}
 
-          {/* =================================================
-              EMPTY STATE
-          ================================================= */}
-
+          {/* EMPTY STATE */}
           {!loading && orders.length === 0 && (
-            <div className="box-border flex w-full max-w-full min-w-0 flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-16 text-center shadow-sm sm:px-6 sm:py-20">
+            <div className="box-border flex w-full min-w-0 flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-16 text-center shadow-sm sm:px-6 sm:py-20">
               <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400">
                 <svg
                   className="h-7 w-7"
@@ -817,12 +703,9 @@ function MyOrders() {
             </div>
           )}
 
-          {/* =================================================
-              ORDERS LIST
-          ================================================= */}
-
+          {/* ORDERS LIST */}
           {!loading && orders.length > 0 && (
-            <div className="w-full max-w-full min-w-0 space-y-4">
+            <div className="w-full min-w-0 space-y-4">
               {orders.map((order) => (
                 <OrderCard
                   key={order._id}
