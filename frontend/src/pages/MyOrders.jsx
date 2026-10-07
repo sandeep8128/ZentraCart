@@ -81,16 +81,14 @@ function TrackingBar({ status }) {
   const currentIndex = STATUS_STEPS.indexOf(status);
 
   return (
-    <div className="w-full overflow-x-auto pb-1">
-      <div className="flex min-w-[360px] items-start">
+    <div className="w-full overflow-x-auto pb-2">
+      <div className="flex min-w-[320px] items-start px-1 sm:min-w-[360px]">
         {STATUS_STEPS.map((step, i) => {
           const done = i <= currentIndex;
           const active = i === currentIndex;
 
           return (
-            <div key={step} className="flex flex-1 items-start">
-              {/* STEP */}
-
+            <div key={step} className="flex min-w-0 flex-1 items-start">
               <div className="flex min-w-0 flex-col items-center">
                 <div
                   className={`flex h-7 w-7 items-center justify-center rounded-full border-2 text-[10px] font-bold transition-all duration-300 sm:h-8 sm:w-8 ${
@@ -127,8 +125,6 @@ function TrackingBar({ status }) {
                 </span>
               </div>
 
-              {/* CONNECTOR */}
-
               {i < STATUS_STEPS.length - 1 && (
                 <div
                   className={`mx-1 mt-3.5 h-0.5 flex-1 rounded-full transition-all duration-300 sm:mt-4 ${
@@ -160,24 +156,22 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
   );
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:border-slate-300 hover:shadow-[0_16px_40px_-12px_rgba(15,23,42,0.14)]">
-      {/* =================================================
-          CARD HEADER
-      ================================================= */}
+    <div className="w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:border-slate-300 hover:shadow-[0_16px_40px_-12px_rgba(15,23,42,0.14)]">
+      {/* CARD HEADER */}
 
-      <div className="border-b border-slate-100 bg-slate-50/60 px-4 py-4 sm:px-6">
+      <div className="border-b border-slate-100 bg-slate-50/60 px-3.5 py-3.5 sm:px-6 sm:py-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           {/* ORDER INFO */}
 
-          <div className="grid grid-cols-2 gap-x-5 gap-y-3 sm:flex sm:items-center sm:gap-4">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:flex sm:items-center sm:gap-4">
             {/* ORDER ID */}
 
-            <div>
+            <div className="min-w-0">
               <p className="text-[9px] font-semibold tracking-[0.18em] text-slate-400 uppercase sm:text-[10px]">
                 Order
               </p>
 
-              <h3 className="mt-0.5 font-mono text-xs font-semibold text-slate-800 sm:text-sm">
+              <h3 className="mt-0.5 truncate font-mono text-xs font-semibold text-slate-800 sm:text-sm">
                 #{order._id.slice(-8).toUpperCase()}
               </h3>
             </div>
@@ -186,12 +180,12 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
 
             {/* DATE */}
 
-            <div>
+            <div className="min-w-0">
               <p className="text-[9px] font-semibold tracking-[0.18em] text-slate-400 uppercase sm:text-[10px]">
                 Placed on
               </p>
 
-              <p className="mt-0.5 text-xs font-medium text-slate-700 sm:text-sm">
+              <p className="mt-0.5 truncate text-xs font-medium text-slate-700 sm:text-sm">
                 {new Date(order.createdAt).toLocaleDateString("en-IN", {
                   day: "numeric",
                   month: "short",
@@ -204,12 +198,12 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
 
             {/* TOTAL */}
 
-            <div>
+            <div className="min-w-0">
               <p className="text-[9px] font-semibold tracking-[0.18em] text-slate-400 uppercase sm:text-[10px]">
                 Total
               </p>
 
-              <p className="mt-0.5 text-xs font-bold text-slate-900 sm:text-sm">
+              <p className="mt-0.5 truncate text-xs font-bold text-slate-900 sm:text-sm">
                 ₹{Number(order.finalAmount).toLocaleString("en-IN")}
               </p>
             </div>
@@ -217,7 +211,7 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
 
           {/* STATUS + TOGGLE */}
 
-          <div className="flex items-center justify-between gap-3 sm:justify-end">
+          <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
             <StatusBadge status={order.orderStatus} />
 
             <button
@@ -245,18 +239,14 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
         </div>
       </div>
 
-      {/* =================================================
-          EXPANDED BODY
-      ================================================= */}
+      {/* EXPANDED BODY */}
 
       {expanded && (
-        <div className="p-4 sm:p-6">
-          <div className="grid gap-6 lg:grid-cols-5">
-            {/* =================================================
-                PRODUCTS
-            ================================================= */}
+        <div className="p-3.5 sm:p-6">
+          <div className="grid min-w-0 gap-4 sm:gap-5 md:gap-6 lg:grid-cols-5">
+            {/* PRODUCTS */}
 
-            <div className="lg:col-span-3">
+            <div className="min-w-0 lg:col-span-3">
               <p className="mb-3 text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase">
                 Items
               </p>
@@ -265,7 +255,7 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
                 {order.products.map((item) => (
                   <div
                     key={item._id}
-                    className="group flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3 transition-all duration-200 hover:border-indigo-100 hover:bg-indigo-50/30"
+                    className="group flex min-w-0 items-center gap-2.5 rounded-xl border border-slate-100 bg-slate-50 p-2.5 transition-all duration-200 hover:border-indigo-100 hover:bg-indigo-50/30 sm:gap-3 sm:p-3"
                   >
                     {/* PRODUCT IMAGE */}
 
@@ -273,10 +263,10 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
                       <img
                         src={item.product.images[0].url}
                         alt={item.product.title}
-                        className="h-14 w-14 shrink-0 rounded-lg bg-white object-contain p-1 transition-transform duration-300 group-hover:scale-105 sm:h-16 sm:w-16"
+                        className="h-12 w-12 shrink-0 rounded-lg bg-white object-contain p-1 transition-transform duration-300 group-hover:scale-105 sm:h-16 sm:w-16"
                       />
                     ) : (
-                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-slate-400 sm:h-16 sm:w-16">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-slate-400 sm:h-16 sm:w-16">
                         <svg
                           className="h-6 w-6"
                           fill="none"
@@ -295,7 +285,7 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
 
                     {/* PRODUCT NAME */}
 
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 overflow-hidden">
                       <p className="line-clamp-2 text-xs font-semibold text-slate-800 transition-colors duration-200 group-hover:text-indigo-600 sm:text-sm">
                         {item.product?.title}
                       </p>
@@ -308,7 +298,7 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
                     {/* PRICE */}
 
                     {item.product?.price && (
-                      <p className="shrink-0 text-xs font-bold text-slate-800 sm:text-sm">
+                      <p className="max-w-[72px] shrink-0 text-right text-xs font-bold text-slate-800 sm:max-w-none sm:text-sm">
                         ₹{Number(item.product.price).toLocaleString("en-IN")}
                       </p>
                     )}
@@ -316,9 +306,7 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
                 ))}
               </div>
 
-              {/* =================================================
-                  TRACKING
-              ================================================= */}
+              {/* TRACKING */}
 
               {order.orderStatus !== "cancelled" && (
                 <div className="mt-6">
@@ -331,20 +319,18 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
               )}
             </div>
 
-            {/* =================================================
-                SUMMARY
-            ================================================= */}
+            {/* SUMMARY */}
 
-            <div className="lg:col-span-2">
+            <div className="min-w-0 lg:col-span-2">
               <p className="mb-3 text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase">
                 Summary
               </p>
 
-              <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 sm:p-4">
                 <div className="space-y-3">
                   {/* ORDER DATE */}
 
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-start justify-between gap-3">
                     <span className="text-xs text-slate-500">Order date</span>
 
                     <span className="text-right text-xs font-medium text-slate-700">
@@ -358,7 +344,7 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
 
                   {/* DELIVERY */}
 
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-start justify-between gap-3">
                     <span className="text-xs text-slate-500">
                       Expected delivery
                     </span>
@@ -374,12 +360,12 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
 
                   {/* PAYMENT */}
 
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-start justify-between gap-3">
                     <span className="text-xs text-slate-500">
                       Payment status
                     </span>
 
-                    <span className="text-xs font-medium text-slate-700 capitalize">
+                    <span className="text-right text-xs font-medium text-slate-700 capitalize">
                       {order.paymentStatus || "Pending"}
                     </span>
                   </div>
@@ -400,9 +386,7 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
                 </div>
               </div>
 
-              {/* =================================================
-                  TRACKING MESSAGE
-              ================================================= */}
+              {/* TRACKING MESSAGE */}
 
               <div
                 className={`mt-3 rounded-xl border p-3 ${
@@ -423,17 +407,15 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
                 </p>
               </div>
 
-              {/* =================================================
-                  DELIVERY ADDRESS
-              ================================================= */}
+              {/* DELIVERY ADDRESS */}
 
               {order.shippingAddress && (
-                <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 transition-all duration-200 hover:border-indigo-200">
+                <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-3.5 transition-all duration-200 hover:border-indigo-200 sm:p-4">
                   <h4 className="mb-3 text-sm font-semibold text-slate-800">
                     📍 Delivery Address
                   </h4>
 
-                  <p className="font-semibold text-slate-800">
+                  <p className="font-semibold break-words text-slate-800">
                     {order.shippingAddress.fullName}
                   </p>
 
@@ -441,11 +423,11 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
                     {order.shippingAddress.phone}
                   </p>
 
-                  <p className="mt-2 text-sm leading-5 text-slate-700">
+                  <p className="mt-2 text-sm leading-5 break-words text-slate-700">
                     {order.shippingAddress.address}
                   </p>
 
-                  <p className="text-sm text-slate-700">
+                  <p className="text-sm break-words text-slate-700">
                     {order.shippingAddress.city}, {order.shippingAddress.state}
                   </p>
 
@@ -454,18 +436,16 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
                   </p>
 
                   {order.shippingAddress.landmark && (
-                    <p className="mt-1 text-sm text-slate-500">
+                    <p className="mt-1 text-sm break-words text-slate-500">
                       Landmark: {order.shippingAddress.landmark}
                     </p>
                   )}
                 </div>
               )}
 
-              {/* =================================================
-                  ACTIONS
-              ================================================= */}
+              {/* ACTIONS */}
 
-              <div className="mt-4 flex flex-col gap-2">
+              <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1">
                 {/* PAY */}
 
                 <button
@@ -482,7 +462,7 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
                   className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-700 transition-all duration-300 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 active:scale-[0.98]"
                 >
                   <svg
-                    className="h-4 w-4"
+                    className="h-4 w-4 shrink-0"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -494,7 +474,8 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
                       d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                     />
                   </svg>
-                  Download Invoice
+
+                  <span>Download Invoice</span>
                 </button>
 
                 {/* CANCEL */}
@@ -724,17 +705,17 @@ function MyOrders() {
     <>
       <Navbar />
 
-      <div className="min-h-screen bg-gray-50">
-        <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-          {/* Page header */}
+      <div className="min-h-screen w-full overflow-x-hidden bg-gray-50">
+        <div className="mx-auto w-full max-w-6xl px-3 py-6 sm:px-4 sm:py-8 md:px-6 md:py-10">
+          {/* PAGE HEADER */}
 
-          <div className="mb-8 flex items-end justify-between">
-            <div>
+          <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
+            <div className="min-w-0">
               <p className="text-[11px] font-semibold tracking-widest text-gray-400 uppercase">
                 ZentraCart
               </p>
 
-              <h1 className="mt-1 text-3xl font-bold tracking-tight text-gray-900">
+              <h1 className="mt-1 text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
                 My Orders
               </h1>
 
@@ -744,13 +725,13 @@ function MyOrders() {
             </div>
 
             {orders.length > 0 && (
-              <span className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-500">
+              <span className="w-fit shrink-0 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-500">
                 {orders.length} {orders.length === 1 ? "order" : "orders"}
               </span>
             )}
           </div>
 
-          {/* Loading */}
+          {/* LOADING */}
 
           {loading && (
             <div className="flex items-center justify-center py-24">
@@ -758,10 +739,10 @@ function MyOrders() {
             </div>
           )}
 
-          {/* Empty state */}
+          {/* EMPTY STATE */}
 
           {!loading && orders.length === 0 && (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white px-6 py-20 text-center shadow-sm">
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-16 text-center shadow-sm sm:px-6 sm:py-20">
               <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-400">
                 <svg
                   className="h-7 w-7"
@@ -788,12 +769,10 @@ function MyOrders() {
             </div>
           )}
 
-          {/* =================================================
-              ORDERS LIST
-          ================================================= */}
+          {/* ORDERS LIST */}
 
           {!loading && orders.length > 0 && (
-            <div className="space-y-4">
+            <div className="w-full space-y-4">
               {orders.map((order) => (
                 <OrderCard
                   key={order._id}
