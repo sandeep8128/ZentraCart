@@ -17,7 +17,7 @@ const Address = require("../models/Address");
 const DELIVERY_RADIUS_KM = 30;
 
 // =====================================================
-// DISTANCE CALCULATOR
+// DISTANCE CALCULATOR - HAVERSINE FORMULA
 // =====================================================
 
 const calculateDistanceKm = (lat1, lon1, lat2, lon2) => {
@@ -98,7 +98,8 @@ exports.createOrder = async (req, res) => {
     cartItems.forEach((item) => {
       if (!item.product) return;
 
-      totalAmount += item.product.price * item.quantity;
+      totalAmount +=
+        Number(item.product.price || 0) * Number(item.quantity || 0);
 
       products.push({
         product: item.product._id,
@@ -130,9 +131,7 @@ exports.createOrder = async (req, res) => {
       });
     }
 
-    // IMPORTANT:
     // Address must belong to logged-in user
-
     const selectedAddress = await Address.findOne({
       _id: addressId,
       user: req.user.id,
@@ -157,8 +156,6 @@ exports.createOrder = async (req, res) => {
     // =========================================================
     // OPTIONAL 30 KM DELIVERY VALIDATION
     // =========================================================
-    //
-    // RULE:
     //
     // Customer location missing
     //      -> NORMAL ORDER ALLOWED
@@ -224,11 +221,11 @@ exports.createOrder = async (req, res) => {
 
       const product = item.product;
 
-      const sellerId = product.seller ? product.seller.toString() : null;
-
       // =================================================
       // SELLER ID CHECK
       // =================================================
+
+      const sellerId = product.seller ? product.seller.toString() : null;
 
       if (!sellerId) {
         return res.status(400).json({
@@ -247,15 +244,8 @@ exports.createOrder = async (req, res) => {
       }
 
       // =================================================
-      // IF CUSTOMER LOCATION IS NOT AVAILABLE
+      // CUSTOMER LOCATION NOT AVAILABLE
       // =================================================
-      //
-      // NORMAL ORDER MODE
-      //
-      // No distance check.
-      //
-      // Seller location can also be missing.
-      //
 
       if (!customerHasLocation) {
         console.log(
@@ -268,20 +258,12 @@ exports.createOrder = async (req, res) => {
       // =================================================
       // CUSTOMER LOCATION EXISTS
       // =================================================
-      //
-      // Now check seller location.
-      //
 
       const sellerHasLocation = hasValidCoordinates(seller.location);
 
       // =================================================
       // SELLER LOCATION NOT AVAILABLE
       // =================================================
-      //
-      // Location system is optional.
-      //
-      // Therefore allow normal order.
-      //
 
       if (!sellerHasLocation) {
         console.log(
@@ -292,7 +274,7 @@ exports.createOrder = async (req, res) => {
       }
 
       // =================================================
-      // GET CUSTOMER COORDINATES
+      // CUSTOMER COORDINATES
       // =================================================
 
       const customerLat = Number(selectedAddress.location.latitude);
@@ -300,7 +282,7 @@ exports.createOrder = async (req, res) => {
       const customerLng = Number(selectedAddress.location.longitude);
 
       // =================================================
-      // GET SELLER COORDINATES
+      // SELLER COORDINATES
       // =================================================
 
       const sellerLat = Number(seller.location.latitude);
@@ -356,14 +338,12 @@ exports.createOrder = async (req, res) => {
         isActive: true,
       });
 
-      if (couponData) {
-        if (new Date() <= couponData.expiryDate) {
-          discountAmount = (totalAmount * couponData.discount) / 100;
+      if (couponData && new Date() <= couponData.expiryDate) {
+        discountAmount = (totalAmount * couponData.discount) / 100;
 
-          finalAmount = totalAmount - discountAmount;
+        finalAmount = totalAmount - discountAmount;
 
-          couponCode = couponData.code;
-        }
+        couponCode = couponData.code;
       }
     }
 
@@ -386,17 +366,11 @@ exports.createOrder = async (req, res) => {
 
       shippingAddress: {
         fullName: selectedAddress.fullName,
-
         phone: selectedAddress.phone,
-
         address: selectedAddress.address,
-
         city: selectedAddress.city,
-
         state: selectedAddress.state,
-
         pincode: selectedAddress.pincode,
-
         landmark: selectedAddress.landmark,
       },
     });
@@ -414,20 +388,59 @@ exports.createOrder = async (req, res) => {
     }
 
     // =================================================
-    // GET USER
+    // CLEAR CART
     // =================================================
 
-    const user = await User.findById(req.user.id);
+    await Cart.deleteMany({
+      user: req.user.id,
+    });
 
     // =================================================
-    // SEND EMAIL
+    // IMPORTANT FIX
+    // SEND SUCCESS RESPONSE IMMEDIATELY
+    // =================================================
+    //
+    // Order created
+    // Stock reduced
+    // Cart cleared
+    //
+    // Now frontend gets response immediately.
+    //
+    // Email / Notification / Socket will run
+    // in background and cannot keep checkout
+    // stuck on "Placing Order..."
+    //
     // =================================================
 
-    if (user) {
-      await sendEmail(
-        user.email,
-        "Order Confirmed - ZentraCart",
-        `Hello ${user.name},
+    res.status(201).json({
+      message: "Order Created Successfully",
+      order,
+    });
+
+    // =================================================
+    // BACKGROUND TASKS
+    // =================================================
+
+    setImmediate(async () => {
+      try {
+        // =================================================
+        // GET USER
+        // =================================================
+
+        const user = await User.findById(req.user.id);
+
+        // =================================================
+        // SEND EMAIL
+        // =================================================
+
+        if (user) {
+          try {
+            await sendEmail(
+              user.email,
+
+              "Order Confirmed - ZentraCart",
+
+              `Hello ${user.name},
 
 Your order has been placed successfully.
 
@@ -438,60 +451,61 @@ Total Amount: ₹${order.finalAmount || order.totalAmount}
 Status: ${order.orderStatus}
 
 Thank you for shopping with ZentraCart.`,
-      );
-    }
+            );
+          } catch (emailError) {
+            console.error("ORDER EMAIL ERROR:", emailError.message);
+          }
+        }
 
-    // =================================================
-    // SAVE NOTIFICATION
-    // =================================================
+        // =================================================
+        // SAVE NOTIFICATION
+        // =================================================
 
-    await Notification.create({
-      user: req.user.id,
+        try {
+          await Notification.create({
+            user: req.user.id,
 
-      title: "Order Placed",
+            title: "Order Placed",
 
-      message: `Your order #${order._id} has been placed successfully`,
-    });
+            message: `Your order #${order._id} has been placed successfully`,
+          });
+        } catch (notificationError) {
+          console.error("NOTIFICATION ERROR:", notificationError.message);
+        }
 
-    // =================================================
-    // SOCKET NOTIFICATION
-    // =================================================
+        // =================================================
+        // SOCKET NOTIFICATION
+        // =================================================
 
-    const io = getIO();
+        try {
+          const io = getIO();
 
-    if (io) {
-      io.emit("newOrder", {
-        message: "New Order Placed",
+          if (io) {
+            io.emit("newOrder", {
+              message: "New Order Placed",
 
-        orderId: order._id,
+              orderId: order._id,
 
-        totalAmount: order.totalAmount,
-      });
-    }
-
-    // =================================================
-    // CLEAR CART
-    // =================================================
-
-    await Cart.deleteMany({
-      user: req.user.id,
-    });
-
-    // =================================================
-    // RESPONSE
-    // =================================================
-
-    res.status(201).json({
-      message: "Order Created Successfully",
-
-      order,
+              totalAmount: order.totalAmount,
+            });
+          }
+        } catch (socketError) {
+          console.error("SOCKET NOTIFICATION ERROR:", socketError.message);
+        }
+      } catch (backgroundError) {
+        console.error("BACKGROUND ORDER TASK ERROR:", backgroundError.message);
+      }
     });
   } catch (error) {
     console.log("ORDER ERROR =>", error);
 
-    res.status(500).json({
-      message: error.message,
-    });
+    // Avoid sending a second response if
+    // success response was already sent.
+    if (!res.headersSent) {
+      return res.status(500).json({
+        message: error.message,
+      });
+    }
   }
 };
 
@@ -507,7 +521,6 @@ exports.getMyOrders = async (req, res) => {
 
     res.json({
       count: orders.length,
-
       orders,
     });
   } catch (error) {
@@ -606,18 +619,21 @@ exports.cancelOrder = async (req, res) => {
       });
     }
 
+    // Only order owner can cancel
     if (order.user.toString() !== req.user.id) {
       return res.status(403).json({
         message: "Unauthorized",
       });
     }
 
+    // Shipped / delivered cannot be cancelled
     if (order.orderStatus === "shipped" || order.orderStatus === "delivered") {
       return res.status(400).json({
         message: "Order cannot be cancelled now",
       });
     }
 
+    // Already cancelled
     if (order.orderStatus === "cancelled") {
       return res.status(400).json({
         message: "Order already cancelled",
@@ -635,6 +651,10 @@ exports.cancelOrder = async (req, res) => {
 
       await item.product.save();
     }
+
+    // =================================================
+    // UPDATE ORDER
+    // =================================================
 
     order.orderStatus = "cancelled";
 
@@ -737,8 +757,10 @@ exports.downloadInvoice = async (req, res) => {
   } catch (error) {
     console.log("INVOICE ERROR =>", error);
 
-    res.status(500).json({
-      message: error.message,
-    });
+    if (!res.headersSent) {
+      res.status(500).json({
+        message: error.message,
+      });
+    }
   }
 };
