@@ -1,11 +1,7 @@
 import { useEffect, useState } from "react";
-
 import { useSelector } from "react-redux";
-
 import API from "../services/api";
-
 import Navbar from "../components/Navbar";
-
 import toast from "react-hot-toast";
 
 const STATUS_STEPS = ["pending", "confirmed", "shipped", "delivered"];
@@ -49,9 +45,13 @@ const statusConfig = {
 
 const trackingMessage = {
   pending: "Order received and waiting for seller confirmation.",
+
   confirmed: "Seller confirmed your order and is preparing shipment.",
+
   shipped: "Package is on the way to your delivery address.",
+
   delivered: "Package delivered successfully. Enjoy your purchase!",
+
   cancelled: "This order has been cancelled.",
 };
 
@@ -64,11 +64,11 @@ function StatusBadge({ status }) {
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold capitalize sm:px-3 sm:text-xs ${cfg.bg} ${cfg.text} ${cfg.border}`}
+      className={`inline-flex max-w-full shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold capitalize sm:px-3 sm:text-xs ${cfg.bg} ${cfg.text} ${cfg.border}`}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${cfg.dot}`} />
 
-      {status}
+      <span className="truncate">{status}</span>
     </span>
   );
 }
@@ -81,17 +81,29 @@ function TrackingBar({ status }) {
   const currentIndex = STATUS_STEPS.indexOf(status);
 
   return (
-    <div className="w-full overflow-x-auto pb-2">
-      <div className="flex min-w-[320px] items-start px-1 sm:min-w-[360px]">
-        {STATUS_STEPS.map((step, i) => {
-          const done = i <= currentIndex;
-          const active = i === currentIndex;
+    <div className="w-full min-w-0">
+      <div className="grid w-full min-w-0 grid-cols-4">
+        {STATUS_STEPS.map((step, index) => {
+          const done = index <= currentIndex;
+          const active = index === currentIndex;
 
           return (
-            <div key={step} className="flex min-w-0 flex-1 items-start">
-              <div className="flex min-w-0 flex-col items-center">
+            <div key={step} className="relative min-w-0">
+              {/* CONNECTOR */}
+
+              {index < STATUS_STEPS.length - 1 && (
                 <div
-                  className={`flex h-7 w-7 items-center justify-center rounded-full border-2 text-[10px] font-bold transition-all duration-300 sm:h-8 sm:w-8 ${
+                  className={`absolute top-3.5 right-0 left-1/2 h-0.5 sm:top-4 ${
+                    index < currentIndex ? "bg-slate-900" : "bg-slate-200"
+                  }`}
+                />
+              )}
+
+              {/* STEP */}
+
+              <div className="relative z-10 flex min-w-0 flex-col items-center">
+                <div
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-[9px] font-bold transition-all duration-300 sm:h-8 sm:w-8 sm:text-[10px] ${
                     done
                       ? "border-slate-900 bg-slate-900 text-white"
                       : "border-slate-200 bg-white text-slate-300"
@@ -112,26 +124,18 @@ function TrackingBar({ status }) {
                       />
                     </svg>
                   ) : (
-                    i + 1
+                    index + 1
                   )}
                 </div>
 
                 <span
-                  className={`mt-1.5 text-[9px] font-medium capitalize sm:text-[10px] ${
+                  className={`mt-1.5 max-w-full truncate px-0.5 text-center text-[8px] font-medium capitalize sm:text-[10px] ${
                     done ? "text-slate-800" : "text-slate-400"
                   }`}
                 >
                   {step}
                 </span>
               </div>
-
-              {i < STATUS_STEPS.length - 1 && (
-                <div
-                  className={`mx-1 mt-3.5 h-0.5 flex-1 rounded-full transition-all duration-300 sm:mt-4 ${
-                    i < currentIndex ? "bg-slate-900" : "bg-slate-200"
-                  }`}
-                />
-              )}
             </div>
           );
         })}
@@ -156,22 +160,24 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
   );
 
   return (
-    <div className="w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:border-slate-300 hover:shadow-[0_16px_40px_-12px_rgba(15,23,42,0.14)]">
-      {/* CARD HEADER */}
+    <div className="box-border w-full max-w-full min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:border-slate-300 hover:shadow-[0_16px_40px_-12px_rgba(15,23,42,0.14)]">
+      {/* =================================================
+          CARD HEADER
+      ================================================= */}
 
-      <div className="border-b border-slate-100 bg-slate-50/60 px-3.5 py-3.5 sm:px-6 sm:py-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="box-border w-full min-w-0 border-b border-slate-100 bg-slate-50/60 px-3 py-3 sm:px-6 sm:py-4">
+        <div className="flex min-w-0 flex-col gap-3 sm:gap-4">
           {/* ORDER INFO */}
 
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:flex sm:items-center sm:gap-4">
+          <div className="grid min-w-0 grid-cols-3 gap-2 sm:flex sm:items-center sm:gap-4">
             {/* ORDER ID */}
 
             <div className="min-w-0">
-              <p className="text-[9px] font-semibold tracking-[0.18em] text-slate-400 uppercase sm:text-[10px]">
+              <p className="truncate text-[8px] font-semibold tracking-[0.14em] text-slate-400 uppercase sm:text-[10px] sm:tracking-[0.18em]">
                 Order
               </p>
 
-              <h3 className="mt-0.5 truncate font-mono text-xs font-semibold text-slate-800 sm:text-sm">
+              <h3 className="mt-0.5 truncate font-mono text-[10px] font-semibold text-slate-800 sm:text-sm">
                 #{order._id.slice(-8).toUpperCase()}
               </h3>
             </div>
@@ -181,11 +187,11 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
             {/* DATE */}
 
             <div className="min-w-0">
-              <p className="text-[9px] font-semibold tracking-[0.18em] text-slate-400 uppercase sm:text-[10px]">
-                Placed on
+              <p className="truncate text-[8px] font-semibold tracking-[0.14em] text-slate-400 uppercase sm:text-[10px] sm:tracking-[0.18em]">
+                Placed
               </p>
 
-              <p className="mt-0.5 truncate text-xs font-medium text-slate-700 sm:text-sm">
+              <p className="mt-0.5 truncate text-[10px] font-medium text-slate-700 sm:text-sm">
                 {new Date(order.createdAt).toLocaleDateString("en-IN", {
                   day: "numeric",
                   month: "short",
@@ -199,11 +205,11 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
             {/* TOTAL */}
 
             <div className="min-w-0">
-              <p className="text-[9px] font-semibold tracking-[0.18em] text-slate-400 uppercase sm:text-[10px]">
+              <p className="truncate text-[8px] font-semibold tracking-[0.14em] text-slate-400 uppercase sm:text-[10px] sm:tracking-[0.18em]">
                 Total
               </p>
 
-              <p className="mt-0.5 truncate text-xs font-bold text-slate-900 sm:text-sm">
+              <p className="mt-0.5 truncate text-[10px] font-bold text-slate-900 sm:text-sm">
                 ₹{Number(order.finalAmount).toLocaleString("en-IN")}
               </p>
             </div>
@@ -211,10 +217,11 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
 
           {/* STATUS + TOGGLE */}
 
-          <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
+          <div className="flex min-w-0 items-center justify-between gap-2">
             <StatusBadge status={order.orderStatus} />
 
             <button
+              type="button"
               onClick={() => setExpanded(!expanded)}
               aria-label={expanded ? "Collapse order" : "Expand order"}
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 transition-all duration-200 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"
@@ -239,31 +246,35 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
         </div>
       </div>
 
-      {/* EXPANDED BODY */}
+      {/* =================================================
+          EXPANDED BODY
+      ================================================= */}
 
       {expanded && (
-        <div className="p-3.5 sm:p-6">
-          <div className="grid min-w-0 gap-4 sm:gap-5 md:gap-6 lg:grid-cols-5">
-            {/* PRODUCTS */}
+        <div className="box-border w-full max-w-full min-w-0 p-3 sm:p-6">
+          <div className="grid w-full max-w-full min-w-0 gap-5 lg:grid-cols-5 lg:gap-6">
+            {/* =================================================
+                PRODUCTS
+            ================================================= */}
 
-            <div className="min-w-0 lg:col-span-3">
+            <div className="max-w-full min-w-0 lg:col-span-3">
               <p className="mb-3 text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase">
                 Items
               </p>
 
-              <div className="space-y-2">
+              <div className="w-full max-w-full min-w-0 space-y-2">
                 {order.products.map((item) => (
                   <div
                     key={item._id}
-                    className="group flex min-w-0 items-center gap-2.5 rounded-xl border border-slate-100 bg-slate-50 p-2.5 transition-all duration-200 hover:border-indigo-100 hover:bg-indigo-50/30 sm:gap-3 sm:p-3"
+                    className="flex max-w-full min-w-0 items-center gap-2 overflow-hidden rounded-xl border border-slate-100 bg-slate-50 p-2.5 transition-all duration-200 hover:border-indigo-100 hover:bg-indigo-50/30 sm:gap-3 sm:p-3"
                   >
-                    {/* PRODUCT IMAGE */}
+                    {/* IMAGE */}
 
                     {item.product?.images?.[0]?.url ? (
                       <img
                         src={item.product.images[0].url}
                         alt={item.product.title}
-                        className="h-12 w-12 shrink-0 rounded-lg bg-white object-contain p-1 transition-transform duration-300 group-hover:scale-105 sm:h-16 sm:w-16"
+                        className="h-12 w-12 shrink-0 rounded-lg bg-white object-contain p-1 sm:h-16 sm:w-16"
                       />
                     ) : (
                       <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-slate-400 sm:h-16 sm:w-16">
@@ -283,10 +294,10 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
                       </div>
                     )}
 
-                    {/* PRODUCT NAME */}
+                    {/* NAME */}
 
                     <div className="min-w-0 flex-1 overflow-hidden">
-                      <p className="line-clamp-2 text-xs font-semibold text-slate-800 transition-colors duration-200 group-hover:text-indigo-600 sm:text-sm">
+                      <p className="line-clamp-2 text-[11px] leading-4 font-semibold break-words text-slate-800 sm:text-sm">
                         {item.product?.title}
                       </p>
 
@@ -298,7 +309,7 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
                     {/* PRICE */}
 
                     {item.product?.price && (
-                      <p className="max-w-[72px] shrink-0 text-right text-xs font-bold text-slate-800 sm:max-w-none sm:text-sm">
+                      <p className="max-w-[65px] shrink-0 truncate text-right text-[10px] font-bold text-slate-800 sm:max-w-none sm:text-sm">
                         ₹{Number(item.product.price).toLocaleString("en-IN")}
                       </p>
                     )}
@@ -306,10 +317,12 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
                 ))}
               </div>
 
-              {/* TRACKING */}
+              {/* =================================================
+                  TRACKING
+              ================================================= */}
 
               {order.orderStatus !== "cancelled" && (
-                <div className="mt-6">
+                <div className="mt-6 min-w-0">
                   <p className="mb-4 text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase">
                     Tracking
                   </p>
@@ -319,21 +332,25 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
               )}
             </div>
 
-            {/* SUMMARY */}
+            {/* =================================================
+                SUMMARY
+            ================================================= */}
 
-            <div className="min-w-0 lg:col-span-2">
+            <div className="max-w-full min-w-0 lg:col-span-2">
               <p className="mb-3 text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase">
                 Summary
               </p>
 
-              <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 sm:p-4">
-                <div className="space-y-3">
+              <div className="box-border w-full max-w-full min-w-0 rounded-xl border border-slate-100 bg-slate-50 p-3 sm:p-4">
+                <div className="w-full min-w-0 space-y-3">
                   {/* ORDER DATE */}
 
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="text-xs text-slate-500">Order date</span>
+                  <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+                    <span className="min-w-0 text-xs break-words text-slate-500">
+                      Order date
+                    </span>
 
-                    <span className="text-right text-xs font-medium text-slate-700">
+                    <span className="max-w-full text-right text-[10px] font-medium text-slate-700 sm:text-xs">
                       {new Date(order.createdAt).toLocaleDateString("en-IN", {
                         day: "numeric",
                         month: "short",
@@ -344,12 +361,12 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
 
                   {/* DELIVERY */}
 
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="text-xs text-slate-500">
+                  <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+                    <span className="min-w-0 text-xs break-words text-slate-500">
                       Expected delivery
                     </span>
 
-                    <span className="text-right text-xs font-medium text-emerald-600">
+                    <span className="max-w-full text-right text-[10px] font-medium text-emerald-600 sm:text-xs">
                       {deliveryDate.toLocaleDateString("en-IN", {
                         day: "numeric",
                         month: "short",
@@ -360,12 +377,12 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
 
                   {/* PAYMENT */}
 
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="text-xs text-slate-500">
+                  <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+                    <span className="min-w-0 text-xs break-words text-slate-500">
                       Payment status
                     </span>
 
-                    <span className="text-right text-xs font-medium text-slate-700 capitalize">
+                    <span className="max-w-[110px] truncate text-right text-[10px] font-medium text-slate-700 capitalize sm:text-xs">
                       {order.paymentStatus || "Pending"}
                     </span>
                   </div>
@@ -373,12 +390,12 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
                   {/* TOTAL */}
 
                   <div className="border-t border-slate-200 pt-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm font-semibold text-slate-700">
+                    <div className="flex min-w-0 items-center justify-between gap-2">
+                      <span className="shrink-0 text-sm font-semibold text-slate-700">
                         Total
                       </span>
 
-                      <span className="text-lg font-extrabold text-slate-900 sm:text-xl">
+                      <span className="min-w-0 truncate text-right text-base font-extrabold text-slate-900 sm:text-xl">
                         ₹{Number(order.finalAmount).toLocaleString("en-IN")}
                       </span>
                     </div>
@@ -389,14 +406,14 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
               {/* TRACKING MESSAGE */}
 
               <div
-                className={`mt-3 rounded-xl border p-3 ${
+                className={`mt-3 box-border w-full max-w-full min-w-0 rounded-xl border p-3 ${
                   order.orderStatus === "cancelled"
                     ? "border-red-100 bg-red-50"
                     : "border-indigo-100 bg-indigo-50/50"
                 }`}
               >
                 <p
-                  className={`text-xs leading-relaxed ${
+                  className={`text-xs leading-5 break-words ${
                     order.orderStatus === "cancelled"
                       ? "text-red-600"
                       : "text-indigo-700"
@@ -410,16 +427,16 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
               {/* DELIVERY ADDRESS */}
 
               {order.shippingAddress && (
-                <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-3.5 transition-all duration-200 hover:border-indigo-200 sm:p-4">
+                <div className="mt-5 box-border w-full max-w-full min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4">
                   <h4 className="mb-3 text-sm font-semibold text-slate-800">
                     📍 Delivery Address
                   </h4>
 
-                  <p className="font-semibold break-words text-slate-800">
+                  <p className="text-sm font-semibold break-words text-slate-800">
                     {order.shippingAddress.fullName}
                   </p>
 
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-1 text-sm break-words text-slate-500">
                     {order.shippingAddress.phone}
                   </p>
 
@@ -427,30 +444,33 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
                     {order.shippingAddress.address}
                   </p>
 
-                  <p className="text-sm break-words text-slate-700">
+                  <p className="text-sm leading-5 break-words text-slate-700">
                     {order.shippingAddress.city}, {order.shippingAddress.state}
                   </p>
 
-                  <p className="text-sm text-slate-700">
+                  <p className="text-sm break-words text-slate-700">
                     PIN: {order.shippingAddress.pincode}
                   </p>
 
                   {order.shippingAddress.landmark && (
-                    <p className="mt-1 text-sm break-words text-slate-500">
+                    <p className="mt-1 text-sm leading-5 break-words text-slate-500">
                       Landmark: {order.shippingAddress.landmark}
                     </p>
                   )}
                 </div>
               )}
 
-              {/* ACTIONS */}
+              {/* =================================================
+                  ACTIONS
+              ================================================= */}
 
-              <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1">
+              <div className="mt-4 grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1">
                 {/* PAY */}
 
                 <button
+                  type="button"
                   onClick={() => onPay(order)}
-                  className="w-full rounded-xl bg-slate-900 py-3 text-sm font-semibold text-white transition-all duration-300 hover:bg-indigo-600 hover:shadow-lg hover:shadow-indigo-100 active:scale-[0.98]"
+                  className="w-full min-w-0 rounded-xl bg-slate-900 px-3 py-3 text-sm font-semibold text-white transition-all duration-300 hover:bg-indigo-600 hover:shadow-lg hover:shadow-indigo-100 active:scale-[0.98]"
                 >
                   Pay Now
                 </button>
@@ -458,8 +478,9 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
                 {/* INVOICE */}
 
                 <button
+                  type="button"
                   onClick={() => onInvoice(order._id)}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-700 transition-all duration-300 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 active:scale-[0.98]"
+                  className="flex w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-700 transition-all duration-300 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 active:scale-[0.98]"
                 >
                   <svg
                     className="h-4 w-4 shrink-0"
@@ -475,26 +496,28 @@ function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
                     />
                   </svg>
 
-                  <span>Download Invoice</span>
+                  <span className="truncate">Download Invoice</span>
                 </button>
 
                 {/* CANCEL */}
 
                 {canCancel && (
                   <button
+                    type="button"
                     onClick={() => onCancel(order._id)}
-                    className="w-full rounded-xl border border-red-200 bg-red-50 py-3 text-sm font-semibold text-red-600 transition-all duration-300 hover:bg-red-100 hover:shadow-sm active:scale-[0.98]"
+                    className="w-full min-w-0 rounded-xl border border-red-200 bg-red-50 px-3 py-3 text-sm font-semibold text-red-600 transition-all duration-300 hover:bg-red-100 hover:shadow-sm active:scale-[0.98]"
                   >
                     Cancel Order
                   </button>
                 )}
 
-                {/* DELETE CANCELLED ORDER */}
+                {/* DELETE */}
 
                 {order.orderStatus === "cancelled" && (
                   <button
+                    type="button"
                     onClick={() => onDelete(order._id)}
-                    className="w-full rounded-xl border border-red-200 bg-red-600 py-3 text-sm font-semibold text-white transition-all duration-300 hover:bg-red-700 hover:shadow-sm active:scale-[0.98]"
+                    className="w-full min-w-0 rounded-xl border border-red-200 bg-red-600 px-3 py-3 text-sm font-semibold text-white transition-all duration-300 hover:bg-red-700 hover:shadow-sm active:scale-[0.98]"
                   >
                     Delete Order
                   </button>
@@ -516,7 +539,6 @@ function MyOrders() {
   const { token } = useSelector((state) => state.auth);
 
   const [orders, setOrders] = useState([]);
-
   const [loading, setLoading] = useState(true);
 
   // =====================================================
@@ -533,9 +555,11 @@ function MyOrders() {
         },
       });
 
-      setOrders(res.data.orders);
+      setOrders(res.data.orders || []);
     } catch (error) {
       console.log(error.response?.data);
+
+      toast.error(error.response?.data?.message || "Failed to load orders");
     } finally {
       setLoading(false);
     }
@@ -549,6 +573,7 @@ function MyOrders() {
     try {
       const response = await API.get(`/orders/invoice/${orderId}`, {
         responseType: "blob",
+
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -620,8 +645,8 @@ function MyOrders() {
 
       toast.success(res.data.message || "Order deleted successfully");
 
-      setOrders((prevOrders) =>
-        prevOrders.filter((order) => order._id !== orderId),
+      setOrders((previousOrders) =>
+        previousOrders.filter((order) => order._id !== orderId),
       );
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to delete order");
@@ -666,30 +691,45 @@ function MyOrders() {
         },
 
         handler: async (response) => {
-          const verifyRes = await API.post(
-            "/payment/verify",
-            {
-              orderId: order._id,
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-            },
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
+          try {
+            const verifyRes = await API.post(
+              "/payment/verify",
+              {
+                orderId: order._id,
+
+                razorpay_order_id: response.razorpay_order_id,
+
+                razorpay_payment_id: response.razorpay_payment_id,
+
+                razorpay_signature: response.razorpay_signature,
               },
-            },
-          );
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              },
+            );
 
-          toast.success(verifyRes.data.message);
+            toast.success(verifyRes.data.message);
 
-          fetchOrders();
+            fetchOrders();
+          } catch (error) {
+            toast.error(
+              error.response?.data?.message || "Payment verification failed",
+            );
+          }
         },
 
         theme: {
           color: "#285570",
         },
       };
+
+      if (!window.Razorpay) {
+        toast.error("Razorpay is not loaded.");
+
+        return;
+      }
 
       new window.Razorpay(options).open();
     } catch (error) {
@@ -698,28 +738,32 @@ function MyOrders() {
   };
 
   useEffect(() => {
-    fetchOrders();
-  }, []);
+    if (token) {
+      fetchOrders();
+    }
+  }, [token]);
 
   return (
     <>
       <Navbar />
 
-      <div className="min-h-screen w-full overflow-x-hidden bg-gray-50">
-        <div className="mx-auto w-full max-w-6xl px-3 py-6 sm:px-4 sm:py-8 md:px-6 md:py-10">
-          {/* PAGE HEADER */}
+      <main className="min-h-screen w-full max-w-full min-w-0 overflow-x-hidden bg-gray-50">
+        <div className="mx-auto box-border w-full max-w-6xl min-w-0 px-3 py-6 sm:px-4 sm:py-8 md:px-6 md:py-10">
+          {/* =================================================
+              PAGE HEADER
+          ================================================= */}
 
-          <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
+          <div className="mb-6 flex min-w-0 flex-col gap-4 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold tracking-widest text-gray-400 uppercase">
+              <p className="text-[10px] font-semibold tracking-widest text-gray-400 uppercase sm:text-[11px]">
                 ZentraCart
               </p>
 
-              <h1 className="mt-1 text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
+              <h1 className="mt-1 truncate text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
                 My Orders
               </h1>
 
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm break-words text-gray-500">
                 Track and manage your orders
               </p>
             </div>
@@ -731,19 +775,23 @@ function MyOrders() {
             )}
           </div>
 
-          {/* LOADING */}
+          {/* =================================================
+              LOADING
+          ================================================= */}
 
           {loading && (
-            <div className="flex items-center justify-center py-24">
+            <div className="flex min-h-[300px] items-center justify-center">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#285570] border-t-transparent" />
             </div>
           )}
 
-          {/* EMPTY STATE */}
+          {/* =================================================
+              EMPTY STATE
+          ================================================= */}
 
           {!loading && orders.length === 0 && (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-16 text-center shadow-sm sm:px-6 sm:py-20">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+            <div className="box-border flex w-full max-w-full min-w-0 flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-16 text-center shadow-sm sm:px-6 sm:py-20">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400">
                 <svg
                   className="h-7 w-7"
                   fill="none"
@@ -763,16 +811,18 @@ function MyOrders() {
                 No orders yet
               </h3>
 
-              <p className="mt-1 max-w-sm text-sm text-slate-400">
+              <p className="mt-1 max-w-sm text-sm break-words text-slate-400">
                 Orders you place will appear here.
               </p>
             </div>
           )}
 
-          {/* ORDERS LIST */}
+          {/* =================================================
+              ORDERS LIST
+          ================================================= */}
 
           {!loading && orders.length > 0 && (
-            <div className="w-full space-y-4">
+            <div className="w-full max-w-full min-w-0 space-y-4">
               {orders.map((order) => (
                 <OrderCard
                   key={order._id}
@@ -786,7 +836,7 @@ function MyOrders() {
             </div>
           )}
         </div>
-      </div>
+      </main>
     </>
   );
 }
