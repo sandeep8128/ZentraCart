@@ -10,22 +10,22 @@ const {
   deleteAddress,
 } = require("../controllers/addressController");
 
-router.post(
-  "/add",
-  authMiddleware,
-  addAddress
-);
 
-router.get(
-  "/my-addresses",
-  authMiddleware,
-  getMyAddresses
-);
+// ADD ADDRESS
 
-router.delete(
-  "/:id",
-  authMiddleware,
-  deleteAddress
-);
+
+router.post("/add", authMiddleware, addAddress);
+
+
+// GET MY ADDRESSES
+
+
+router.get("/my-addresses", authMiddleware, getMyAddresses);
+
+
+// DELETE ADDRESS
+
+
+router.delete("/:id", authMiddleware, deleteAddress);
 
 module.exports = router;

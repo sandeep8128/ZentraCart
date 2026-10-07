@@ -43,6 +43,19 @@ const addressSchema = new mongoose.Schema(
       default: "",
     },
 
+    // Delivery address location
+    location: {
+      latitude: {
+        type: Number,
+        default: null,
+      },
+
+      longitude: {
+        type: Number,
+        default: null,
+      },
+    },
+
     isDefault: {
       type: Boolean,
       default: false,
@@ -50,10 +63,7 @@ const addressSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
-module.exports = mongoose.model(
-  "Address",
-  addressSchema
-);
+module.exports = mongoose.model("Address", addressSchema);

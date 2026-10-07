@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+
 import API from "../services/api";
+
 import Navbar from "../components/Navbar";
 import ProductCard from "../components/ProductCard";
 import Loader from "../components/Loader";
@@ -12,68 +14,200 @@ const SORT_OPTIONS = [
   { value: "rating", label: "Highest Rating" },
 ];
 
+const DELIVERY_RADIUS_KM = 30;
+
 function Products() {
   const [searchParams] = useSearchParams();
 
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(false);
+
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
   const [keyword, setKeyword] = useState(searchParams.get("keyword") || "");
+
   const [category, setCategory] = useState("");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [sort, setSort] = useState("");
 
-  // ==========================
+  // =====================================================
+  // LOCATION
+  // =====================================================
+
+  const [location, setLocation] = useState(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState("");
+
+  // =====================================================
+  // LOAD SAVED LOCATION
+  // =====================================================
+
+  useEffect(() => {
+    try {
+      const savedLocation = localStorage.getItem("zentraCartLocation");
+
+      if (savedLocation) {
+        const parsedLocation = JSON.parse(savedLocation);
+
+        if (
+          Number.isFinite(Number(parsedLocation.latitude)) &&
+          Number.isFinite(Number(parsedLocation.longitude))
+        ) {
+          setLocation({
+            latitude: Number(parsedLocation.latitude),
+            longitude: Number(parsedLocation.longitude),
+            address: parsedLocation.address || "",
+          });
+        }
+      }
+    } catch (error) {
+      console.log("LOCATION LOAD ERROR:", error);
+    }
+  }, []);
+
+  // =====================================================
+  // GET CURRENT LOCATION
+  // =====================================================
+
+  const handleUseCurrentLocation = () => {
+    setLocationError("");
+
+    if (!navigator.geolocation) {
+      setLocationError("Geolocation is not supported by your browser.");
+      return;
+    }
+
+    setLocationLoading(true);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const newLocation = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        };
+
+        setLocation(newLocation);
+
+        localStorage.setItem("zentraCartLocation", JSON.stringify(newLocation));
+
+        setPage(1);
+        setLocationLoading(false);
+      },
+      (error) => {
+        console.log("LOCATION ERROR:", error);
+
+        let message = "Unable to get your location.";
+
+        if (error.code === 1) {
+          message =
+            "Location permission denied. You can continue shopping normally.";
+        } else if (error.code === 2) {
+          message = "Your location could not be determined.";
+        } else if (error.code === 3) {
+          message = "Location request timed out.";
+        }
+
+        setLocationError(message);
+        setLocationLoading(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 300000,
+      },
+    );
+  };
+
+  // =====================================================
+  // CLEAR LOCATION
+  // =====================================================
+
+  const handleClearLocation = () => {
+    setLocation(null);
+    setLocationError("");
+
+    localStorage.removeItem("zentraCartLocation");
+
+    setPage(1);
+  };
+
+  // =====================================================
   // FETCH PRODUCTS
-  // ==========================
+  // =====================================================
 
   const fetchProducts = async () => {
     setLoading(true);
 
     try {
-      const res = await API.get(
-        `/products?keyword=${encodeURIComponent(
-          keyword,
-        )}&category=${encodeURIComponent(
-          category,
-        )}&minPrice=${minPrice}&maxPrice=${maxPrice}&sort=${sort}&page=${page}`,
-      );
+      const params = new URLSearchParams();
+
+      params.append("keyword", keyword);
+      params.append("category", category);
+      params.append("minPrice", minPrice);
+      params.append("maxPrice", maxPrice);
+      params.append("sort", sort);
+      params.append("page", page);
+
+      // =================================================
+      // OPTIONAL LOCATION
+      // =================================================
+
+      if (
+        location &&
+        Number.isFinite(Number(location.latitude)) &&
+        Number.isFinite(Number(location.longitude))
+      ) {
+        params.append("latitude", Number(location.latitude));
+
+        params.append("longitude", Number(location.longitude));
+      }
+
+      const res = await API.get(`/products?${params.toString()}`);
 
       setProducts(res.data.products || []);
+
       setTotalPages(res.data.totalPages || 1);
     } catch (error) {
       console.log(error.response?.data || error.message);
+
+      setProducts([]);
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }
   };
 
-  // ==========================
+  // =====================================================
   // LOAD PRODUCTS
-  // ==========================
+  // =====================================================
 
   useEffect(() => {
     const urlKeyword = searchParams.get("keyword") || "";
 
     setKeyword(urlKeyword);
-    fetchProducts();
-  }, [page, searchParams]);
 
-  // ==========================
+    fetchProducts();
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, searchParams, location]);
+
+  // =====================================================
   // SEARCH
-  // ==========================
+  // =====================================================
 
   const handleSearch = () => {
     setPage(1);
-    fetchProducts();
+
+    setTimeout(() => {
+      fetchProducts();
+    }, 0);
   };
 
-  // ==========================
+  // =====================================================
   // RESET
-  // ==========================
+  // =====================================================
 
   const handleReset = () => {
     setKeyword("");
@@ -88,9 +222,9 @@ function Products() {
     }, 100);
   };
 
-  // ==========================
+  // =====================================================
   // SLIDER PRODUCTS
-  // ==========================
+  // =====================================================
 
   const sliderProducts = products.filter(
     (p) =>
@@ -101,21 +235,30 @@ function Products() {
       p.thumbnail,
   );
 
-  // ==========================
+  // =====================================================
   // ACTIVE FILTER COUNT
-  // ==========================
+  // =====================================================
 
   const activeFilterCount = [category, minPrice, maxPrice, sort].filter(
     Boolean,
   ).length;
 
+  // =====================================================
+  // LOCATION ACTIVE
+  // =====================================================
+
+  const isLocationActive =
+    location &&
+    Number.isFinite(Number(location.latitude)) &&
+    Number.isFinite(Number(location.longitude));
+
+  // =====================================================
+  // RENDER
+  // =====================================================
+
   return (
     <>
       <Navbar />
-
-      {/* ==========================
-          ANIMATION
-      ========================== */}
 
       <style>{`
         @keyframes productMarquee {
@@ -145,10 +288,7 @@ function Products() {
         ===================================================== */}
 
         <div className="relative min-h-[210px] overflow-hidden bg-gradient-to-br from-[#0b1220] via-[#141b3d] to-[#1a1436] px-4 pt-10 pb-16 sm:px-6 sm:pt-12 sm:pb-20">
-          {/* ==========================
-              SLIDING PRODUCTS
-              OPACITY 90%
-          ========================== */}
+          {/* SLIDING PRODUCTS */}
 
           {sliderProducts.length > 0 && (
             <div className="absolute inset-0 opacity-[0.9]">
@@ -178,15 +318,11 @@ function Products() {
             </div>
           )}
 
-          {/* ==========================
-              DARK OVERLAY
-          ========================== */}
+          {/* DARK OVERLAY */}
 
           <div className="absolute inset-0 bg-gradient-to-br from-[#0b1220]/90 via-[#141b3d]/85 to-[#1a1436]/90" />
 
-          {/* ==========================
-              HEADER CONTENT
-          ========================== */}
+          {/* HEADER CONTENT */}
 
           <div className="relative z-10 mx-auto max-w-7xl">
             <p className="mb-2 text-[11px] font-semibold tracking-[2px] text-indigo-300 uppercase sm:text-xs">
@@ -208,12 +344,72 @@ function Products() {
 
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-6">
           {/* =====================================================
+              LOCATION CARD
+          ===================================================== */}
+
+          <div className="relative z-20 -mt-8 mb-6 rounded-2xl border border-indigo-100 bg-white p-4 shadow-lg sm:p-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-lg">
+                  📍
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-800 sm:text-base">
+                    Nearby Delivery
+                  </h3>
+
+                  {isLocationActive ? (
+                    <p className="mt-1 text-xs text-slate-500 sm:text-sm">
+                      Showing products from sellers within{" "}
+                      <span className="font-semibold text-indigo-600">
+                        {DELIVERY_RADIUS_KM} KM
+                      </span>{" "}
+                      of your location.
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-xs text-slate-500 sm:text-sm">
+                      Location is optional. You can shop normally without
+                      sharing your location.
+                    </p>
+                  )}
+
+                  {locationError && (
+                    <p className="mt-2 text-xs text-amber-600">
+                      {locationError}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 sm:flex-row">
+                {!isLocationActive ? (
+                  <button
+                    onClick={handleUseCurrentLocation}
+                    disabled={locationLoading}
+                    className="rounded-xl bg-gradient-to-r from-indigo-600 to-pink-500 px-5 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm"
+                  >
+                    {locationLoading
+                      ? "Getting Location..."
+                      : "📍 Use My Location"}
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleClearLocation}
+                    className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 sm:text-sm"
+                  >
+                    ✕ Browse All Products
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* =====================================================
               FILTER & SORT
           ===================================================== */}
 
-          <div className="relative z-20 -mt-8 mb-8 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl sm:-mt-8 sm:mb-10 sm:p-6">
-            {/* TITLE */}
-
+          <div className="relative z-20 mb-8 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl sm:mb-10 sm:p-6">
             <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="text-sm font-semibold text-slate-700 sm:text-base">
                 Filter &amp; Sort
@@ -308,13 +504,21 @@ function Products() {
           ===================================================== */}
 
           {!loading && (
-            <p className="mb-5 text-xs text-slate-500 sm:text-sm">
-              {products.length > 0
-                ? `Showing ${products.length} product${
-                    products.length > 1 ? "s" : ""
-                  }`
-                : "No results"}
-            </p>
+            <div className="mb-5 flex flex-wrap items-center gap-2 text-xs text-slate-500 sm:text-sm">
+              <span>
+                {products.length > 0
+                  ? `Showing ${products.length} product${
+                      products.length > 1 ? "s" : ""
+                    }`
+                  : "No results"}
+              </span>
+
+              {isLocationActive && (
+                <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-medium text-green-600">
+                  📍 Within {DELIVERY_RADIUS_KM} KM
+                </span>
+              )}
+            </div>
           )}
 
           {/* =====================================================
@@ -334,8 +538,19 @@ function Products() {
               </h3>
 
               <p className="mt-1 text-xs text-slate-400 sm:text-sm">
-                Try adjusting your filters or search keyword.
+                {isLocationActive
+                  ? `No products are currently available from sellers within ${DELIVERY_RADIUS_KM} KM. Try browsing all products.`
+                  : "Try adjusting your filters or search keyword."}
               </p>
+
+              {isLocationActive && (
+                <button
+                  onClick={handleClearLocation}
+                  className="mt-5 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700"
+                >
+                  Browse All Products
+                </button>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-4">

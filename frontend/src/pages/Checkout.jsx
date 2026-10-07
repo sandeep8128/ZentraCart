@@ -15,16 +15,31 @@ import {
   CheckCircle2,
   MapPin,
   CreditCard,
+  Navigation,
+  AlertTriangle,
 } from "lucide-react";
 
 function Checkout() {
   const { token } = useSelector((state) => state.auth);
   const navigate = useNavigate();
 
+  // =====================================================
+  // CART
+  // =====================================================
+
   const [cartItems, setCartItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  // =====================================================
+  // COUPON
+  // =====================================================
+
   const [coupon, setCoupon] = useState("");
   const [couponApplied, setCouponApplied] = useState(false);
-  const [loading, setLoading] = useState(false);
+
+  // =====================================================
+  // ADDRESS FORM
+  // =====================================================
 
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -34,8 +49,38 @@ function Checkout() {
   const [pincode, setPincode] = useState("");
   const [landmark, setLandmark] = useState("");
 
+  // =====================================================
+  // OPTIONAL LOCATION
+  // =====================================================
+
+  const [latitude, setLatitude] = useState(null);
+  const [longitude, setLongitude] = useState(null);
+
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationReady, setLocationReady] = useState(false);
+
+  // =====================================================
+  // SAVED ADDRESSES
+  // =====================================================
+
   const [addresses, setAddresses] = useState([]);
   const [selectedAddress, setSelectedAddress] = useState("");
+
+  // =====================================================
+  // DELIVERY WARNING
+  // =====================================================
+
+  const [deliveryWarning, setDeliveryWarning] = useState("");
+
+  // =====================================================
+  // AUTH HEADERS
+  // =====================================================
+
+  const authConfig = {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  };
 
   // =====================================================
   // FETCH CART
@@ -43,15 +88,13 @@ function Checkout() {
 
   const fetchCart = async () => {
     try {
-      const res = await API.get("/cart", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const res = await API.get("/cart", authConfig);
 
       setCartItems(res.data.cart || []);
     } catch (error) {
       console.log("CART ERROR:", error.response?.data);
+
+      toast.error(error.response?.data?.message || "Failed to load cart");
     }
   };
 
@@ -61,13 +104,16 @@ function Checkout() {
 
   const fetchAddresses = async () => {
     try {
-      const res = await API.get("/address/my-addresses", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const res = await API.get("/address/my-addresses", authConfig);
 
-      setAddresses(res.data.addresses || []);
+      const savedAddresses = res.data.addresses || [];
+
+      setAddresses(savedAddresses);
+
+      // Automatically select first address if nothing selected
+      if (!selectedAddress && savedAddresses.length > 0) {
+        setSelectedAddress(savedAddresses[0]._id);
+      }
     } catch (error) {
       console.log("ADDRESS FETCH ERROR:", error.response?.data);
     }
@@ -99,17 +145,112 @@ function Checkout() {
   const finalTotal = total + shipping;
 
   // =====================================================
+  // OPTIONAL CURRENT LOCATION
+  // =====================================================
+
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error("Geolocation is not supported by your browser.");
+      return;
+    }
+
+    setLocationLoading(true);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+
+        setLatitude(lat);
+        setLongitude(lng);
+        setLocationReady(true);
+        setLocationLoading(false);
+
+        toast.success("Current location detected successfully.");
+      },
+
+      (error) => {
+        console.log("LOCATION ERROR:", error);
+
+        setLocationLoading(false);
+        setLocationReady(false);
+
+        if (error.code === 1) {
+          toast.error(
+            "Location permission denied. You can continue without location.",
+          );
+        } else if (error.code === 2) {
+          toast.error(
+            "Unable to detect your location. You can continue without location.",
+          );
+        } else if (error.code === 3) {
+          toast.error(
+            "Location request timed out. You can continue without location.",
+          );
+        } else {
+          toast.error(
+            "Unable to detect location. You can continue without location.",
+          );
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+      },
+    );
+  };
+
+  // =====================================================
+  // CLEAR LOCATION
+  // =====================================================
+
+  const clearLocation = () => {
+    setLatitude(null);
+    setLongitude(null);
+    setLocationReady(false);
+    setDeliveryWarning("");
+
+    toast.success("Location disabled. Normal shopping/order mode enabled.");
+  };
+
+  // =====================================================
   // PLACE ORDER
   // =====================================================
 
   const handlePlaceOrder = async () => {
+    setDeliveryWarning("");
+
+    // Address is still required.
+    // Location is NOT required.
     if (!selectedAddress) {
       toast.error("Please select delivery address");
       return;
     }
 
+    const selected = addresses.find((item) => item._id === selectedAddress);
+
+    if (!selected) {
+      toast.error("Selected address not found.");
+      return;
+    }
+
     try {
       setLoading(true);
+
+      /*
+       * IMPORTANT:
+       *
+       * We do NOT force customer location here.
+       *
+       * Backend will decide:
+       *
+       * Customer location + Seller location available
+       *       -> 30 KM check
+       *
+       * Either location missing
+       *       -> Normal order allowed
+       */
 
       const res = await API.post(
         "/orders/create",
@@ -117,11 +258,7 @@ function Checkout() {
           coupon,
           addressId: selectedAddress,
         },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
+        authConfig,
       );
 
       console.log("ORDER RESPONSE:", res.data);
@@ -132,7 +269,77 @@ function Checkout() {
     } catch (error) {
       console.log("ORDER ERROR:", error.response?.data);
 
-      toast.error(error.response?.data?.message || "Failed to create order");
+      const errorData = error.response?.data;
+
+      // =================================================
+      // OUTSIDE 30 KM
+      // =================================================
+
+      if (errorData?.code === "OUTSIDE_DELIVERY_RADIUS") {
+        const distance = errorData.distance;
+
+        const message =
+          distance !== undefined
+            ? `${errorData.message} Distance: ${distance} KM. Maximum delivery distance is 30 KM.`
+            : errorData.message ||
+              "This seller is outside your 30 KM delivery range.";
+
+        setDeliveryWarning(message);
+
+        toast.error(message);
+
+        return;
+      }
+
+      // =================================================
+      // SELLER LOCATION MISSING
+      // =================================================
+
+      if (errorData?.code === "SELLER_LOCATION_MISSING") {
+        /*
+         * Optional location system:
+         *
+         * Backend should NOT normally return this
+         * as a blocking error anymore.
+         *
+         * Kept here for backward compatibility.
+         */
+
+        setDeliveryWarning(
+          errorData.message || "Seller location is unavailable.",
+        );
+
+        toast.error(errorData.message || "Seller location is unavailable.");
+
+        return;
+      }
+
+      // =================================================
+      // CUSTOMER LOCATION REQUIRED
+      // =================================================
+
+      if (errorData?.code === "DELIVERY_LOCATION_REQUIRED") {
+        /*
+         * This should NOT happen with the new backend.
+         * Location is optional.
+         *
+         * Kept only for compatibility with old backend.
+         */
+
+        setDeliveryWarning(
+          "Location is optional. Please update your backend OrderController to allow normal orders without location.",
+        );
+
+        toast.error("Backend still requires location. Update OrderController.");
+
+        return;
+      }
+
+      // =================================================
+      // GENERIC ERROR
+      // =================================================
+
+      toast.error(errorData?.message || "Failed to create order");
     } finally {
       setLoading(false);
     }
@@ -151,9 +358,9 @@ function Checkout() {
     const cleanPincode = pincode.trim();
     const cleanLandmark = landmark.trim();
 
-    // -----------------------------
+    // =================================================
     // VALIDATION
-    // -----------------------------
+    // =================================================
 
     if (!cleanFullName) {
       toast.error("Please enter full name");
@@ -195,26 +402,43 @@ function Checkout() {
       return;
     }
 
+    // =================================================
+    // OPTIONAL LOCATION PAYLOAD
+    // =================================================
+
+    const payload = {
+      fullName: cleanFullName,
+      phone: cleanPhone,
+      address: cleanAddress,
+      city: cleanCity,
+      state: cleanState,
+      pincode: cleanPincode,
+      landmark: cleanLandmark,
+    };
+
+    /*
+     * IMPORTANT:
+     *
+     * Location is optional.
+     *
+     * If user clicked "Use My Current Location",
+     * send coordinates.
+     *
+     * Otherwise don't send them.
+     */
+
+    if (
+      latitude !== null &&
+      longitude !== null &&
+      Number.isFinite(Number(latitude)) &&
+      Number.isFinite(Number(longitude))
+    ) {
+      payload.latitude = Number(latitude);
+      payload.longitude = Number(longitude);
+    }
+
     try {
-      // -----------------------------
-      // DEBUG PAYLOAD
-      // -----------------------------
-
-      const payload = {
-        fullName: cleanFullName,
-        phone: cleanPhone,
-        address: cleanAddress,
-        city: cleanCity,
-        state: cleanState,
-        pincode: cleanPincode,
-        landmark: cleanLandmark,
-      };
-
       console.log("ADDRESS PAYLOAD:", payload);
-
-      // -----------------------------
-      // API
-      // -----------------------------
 
       const res = await API.post("/address/add", payload, {
         headers: {
@@ -225,26 +449,17 @@ function Checkout() {
 
       console.log("ADDRESS SUCCESS:", res.data);
 
-      toast.success(res.data.message || "Address Added");
+      toast.success(res.data.message || "Address Added Successfully");
 
-      // -----------------------------
-      // REFRESH ADDRESS LIST
-      // -----------------------------
-
+      // Refresh address list
       await fetchAddresses();
 
-      // -----------------------------
-      // AUTO SELECT NEW ADDRESS
-      // -----------------------------
-
+      // Auto-select newly created address
       if (res.data.address?._id) {
         setSelectedAddress(res.data.address._id);
       }
 
-      // -----------------------------
-      // CLEAR FORM
-      // -----------------------------
-
+      // Clear form
       setFullName("");
       setPhone("");
       setAddress("");
@@ -252,10 +467,47 @@ function Checkout() {
       setStateName("");
       setPincode("");
       setLandmark("");
+
+      // Clear temporary location
+      setLatitude(null);
+      setLongitude(null);
+      setLocationReady(false);
     } catch (error) {
       console.log("ADDRESS ERROR:", error.response?.data);
 
       toast.error(error.response?.data?.message || "Failed to save address");
+    }
+  };
+
+  // =====================================================
+  // SELECT SAVED ADDRESS
+  // =====================================================
+
+  const handleSelectAddress = (addressId) => {
+    setSelectedAddress(addressId);
+    setDeliveryWarning("");
+
+    const selected = addresses.find((item) => item._id === addressId);
+
+    /*
+     * Location is optional.
+     *
+     * Therefore:
+     *
+     * Address without location
+     *       -> completely valid
+     *
+     * Address with location
+     *       -> 30 KM system can be used
+     */
+
+    if (
+      selected?.location?.latitude !== null &&
+      selected?.location?.latitude !== undefined &&
+      selected?.location?.longitude !== null &&
+      selected?.location?.longitude !== undefined
+    ) {
+      console.log("Selected address has location:", selected.location);
     }
   };
 
@@ -294,16 +546,14 @@ function Checkout() {
 
       <div className="min-h-screen bg-[#FAF7F6]">
         <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8 lg:py-10">
-          {/* =================================================
-              PAGE HEADER
-          ================================================= */}
+          {/* PAGE HEADER */}
 
           <div className="mb-6 sm:mb-8">
-            <p className="text-[10px] font-bold tracking-[0.2em] text-slate-500 uppercase transition-colors hover:text-indigo-600 sm:text-[11px]">
+            <p className="text-[10px] font-bold tracking-[0.2em] text-slate-500 uppercase">
               ZentraCart
             </p>
 
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 transition-colors duration-300 hover:text-indigo-600 sm:text-3xl">
+            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
               Checkout
             </h1>
 
@@ -312,21 +562,19 @@ function Checkout() {
             </p>
           </div>
 
-          {/* =================================================
-              MAIN GRID
-          ================================================= */}
+          {/* MAIN GRID */}
 
           <div className="grid gap-5 lg:grid-cols-3 lg:gap-6">
-            {/* =================================================
-                LEFT SECTION
-            ================================================= */}
+            {/* ================================================= */}
+            {/* LEFT */}
+            {/* ================================================= */}
 
             <div className="space-y-5 lg:col-span-2">
-              {/* =================================================
-                  CART ITEMS
-              ================================================= */}
+              {/* ================================================= */}
+              {/* CART ITEMS */}
+              {/* ================================================= */}
 
-              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:border-slate-300 hover:shadow-[0_16px_40px_-12px_rgba(15,23,42,0.12)]">
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="border-b border-slate-100 px-4 py-4 sm:px-6">
                   <p className="text-[10px] font-bold tracking-[0.18em] text-slate-400 uppercase">
                     Your Items
@@ -339,60 +587,63 @@ function Checkout() {
                 </div>
 
                 <div className="divide-y divide-slate-100 px-4 sm:px-6">
-                  {cartItems.map((item) => (
-                    <div
-                      key={item._id}
-                      className="group flex gap-3 py-4 transition-colors duration-200 sm:gap-4"
-                    >
-                      {/* IMAGE */}
-
-                      <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-50 transition-all duration-300 group-hover:bg-indigo-50/40 sm:h-20 sm:w-20">
-                        {item.product?.images?.[0]?.url ? (
-                          <img
-                            src={item.product.images[0].url}
-                            alt={item.product.title}
-                            className="h-full w-full object-contain p-1.5 transition-transform duration-300 group-hover:scale-105"
-                          />
-                        ) : (
-                          <ImageOff
-                            size={22}
-                            className="text-slate-300 transition-colors group-hover:text-indigo-400"
-                          />
-                        )}
-                      </div>
-
-                      {/* PRODUCT */}
-
-                      <div className="min-w-0 flex-1">
-                        <h3 className="line-clamp-2 text-xs font-semibold text-slate-800 transition-colors duration-200 group-hover:text-indigo-600 sm:text-sm">
-                          {item.product?.title}
-                        </h3>
-
-                        <p className="mt-1 text-[11px] text-slate-400 sm:text-xs">
-                          Qty: {item.quantity}
-                        </p>
-                      </div>
-
-                      {/* PRICE */}
-
-                      <div className="shrink-0 text-right">
-                        <p className="text-xs font-bold text-slate-900 sm:text-sm">
-                          ₹
-                          {Number(
-                            (item.product?.price || 0) * item.quantity,
-                          ).toLocaleString("en-IN")}
-                        </p>
-
-                        <p className="mt-0.5 text-[10px] text-slate-400 sm:text-xs">
-                          ₹
-                          {Number(item.product?.price || 0).toLocaleString(
-                            "en-IN",
-                          )}{" "}
-                          each
-                        </p>
-                      </div>
+                  {cartItems.length === 0 ? (
+                    <div className="py-8 text-center text-sm text-slate-400">
+                      Your cart is empty.
                     </div>
-                  ))}
+                  ) : (
+                    cartItems.map((item) => (
+                      <div
+                        key={item._id}
+                        className="group flex gap-3 py-4 sm:gap-4"
+                      >
+                        {/* IMAGE */}
+
+                        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-50 sm:h-20 sm:w-20">
+                          {item.product?.images?.[0]?.url ? (
+                            <img
+                              src={item.product.images[0].url}
+                              alt={item.product.title}
+                              className="h-full w-full object-contain p-1.5"
+                            />
+                          ) : (
+                            <ImageOff size={22} className="text-slate-300" />
+                          )}
+                        </div>
+
+                        {/* PRODUCT */}
+
+                        <div className="min-w-0 flex-1">
+                          <h3 className="line-clamp-2 text-xs font-semibold text-slate-800 sm:text-sm">
+                            {item.product?.title}
+                          </h3>
+
+                          <p className="mt-1 text-[11px] text-slate-400 sm:text-xs">
+                            Qty: {item.quantity}
+                          </p>
+                        </div>
+
+                        {/* PRICE */}
+
+                        <div className="shrink-0 text-right">
+                          <p className="text-xs font-bold text-slate-900 sm:text-sm">
+                            ₹
+                            {Number(
+                              (item.product?.price || 0) * item.quantity,
+                            ).toLocaleString("en-IN")}
+                          </p>
+
+                          <p className="mt-0.5 text-[10px] text-slate-400 sm:text-xs">
+                            ₹
+                            {Number(item.product?.price || 0).toLocaleString(
+                              "en-IN",
+                            )}{" "}
+                            each
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
 
                 {total > 999 && (
@@ -409,11 +660,11 @@ function Checkout() {
                 )}
               </div>
 
-              {/* =================================================
-                  DELIVERY ADDRESS
-              ================================================= */}
+              {/* ================================================= */}
+              {/* DELIVERY ADDRESS */}
+              {/* ================================================= */}
 
-              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:border-slate-300 hover:shadow-[0_16px_40px_-12px_rgba(15,23,42,0.12)]">
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 {/* HEADER */}
 
                 <div className="border-b border-slate-100 px-4 py-4 sm:px-6">
@@ -515,21 +766,116 @@ function Checkout() {
                     className={inputCls}
                   />
 
+                  {/* ================================================= */}
+                  {/* OPTIONAL LOCATION */}
+                  {/* ================================================= */}
+
+                  <div className="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm">
+                        <Navigation size={18} className="text-indigo-600" />
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-slate-800">
+                          Delivery Location
+                          <span className="ml-2 rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-indigo-600">
+                            Optional
+                          </span>
+                        </p>
+
+                        <p className="mt-1 text-xs leading-5 text-slate-500">
+                          Use your current location to enable the{" "}
+                          <strong className="text-indigo-600">30 KM</strong>{" "}
+                          nearby-seller delivery system.
+                        </p>
+
+                        {/* LOCATION ACTIVE */}
+
+                        {locationReady &&
+                          latitude !== null &&
+                          longitude !== null && (
+                            <div className="mt-2 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2">
+                              <p className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
+                                <CheckCircle2 size={13} />
+                                Current location detected
+                              </p>
+
+                              <p className="mt-1 text-[10px] text-emerald-600">
+                                30 KM delivery checking is active.
+                              </p>
+                            </div>
+                          )}
+
+                        {/* LOCATION BUTTON */}
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={getCurrentLocation}
+                            disabled={locationLoading}
+                            className="flex items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-white px-4 py-2.5 text-xs font-semibold text-indigo-700 transition hover:border-indigo-400 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {locationLoading ? (
+                              <>
+                                <Loader2 size={15} className="animate-spin" />
+                                Detecting...
+                              </>
+                            ) : (
+                              <>
+                                <Navigation size={15} />
+                                Use My Current Location
+                              </>
+                            )}
+                          </button>
+
+                          {/* REMOVE LOCATION */}
+
+                          {locationReady && (
+                            <button
+                              type="button"
+                              onClick={clearLocation}
+                              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                            >
+                              Continue Without Location
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* OPTIONAL LOCATION INFO */}
+
+                  {!locationReady && (
+                    <div className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                      <MapPin
+                        size={16}
+                        className="mt-0.5 shrink-0 text-slate-500"
+                      />
+
+                      <p className="text-xs leading-5 text-slate-600">
+                        Location is <strong>optional</strong>. You can continue
+                        checkout normally without sharing your location.
+                      </p>
+                    </div>
+                  )}
+
                   {/* SAVE ADDRESS */}
 
                   <div className="pt-1">
                     <button
                       type="button"
                       onClick={saveAddress}
-                      className="w-full rounded-xl border border-slate-900 bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition-all duration-300 hover:border-indigo-600 hover:bg-indigo-600 hover:shadow-lg hover:shadow-indigo-100 active:scale-[0.98] sm:w-auto"
+                      className="w-full rounded-xl border border-slate-900 bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:border-indigo-600 hover:bg-indigo-600 sm:w-auto"
                     >
                       Save Address
                     </button>
                   </div>
 
-                  {/* =================================================
-                      SAVED ADDRESSES
-                  ================================================= */}
+                  {/* ================================================= */}
+                  {/* SAVED ADDRESSES */}
+                  {/* ================================================= */}
 
                   <div className="mt-6">
                     <h3 className="mb-3 text-sm font-semibold text-slate-800">
@@ -542,47 +888,90 @@ function Checkout() {
                       </p>
                     ) : (
                       <div className="space-y-3">
-                        {addresses.map((item) => (
-                          <label
-                            key={item._id}
-                            className={`group block cursor-pointer rounded-xl border p-3 transition-all duration-200 sm:p-4 ${
-                              selectedAddress === item._id
-                                ? "border-slate-900 bg-slate-50 shadow-sm"
-                                : "border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/30"
-                            } `}
-                          >
-                            <div className="flex items-start gap-3">
-                              <input
-                                type="radio"
-                                name="address"
-                                value={item._id}
-                                checked={selectedAddress === item._id}
-                                onChange={() => setSelectedAddress(item._id)}
-                                className="mt-1 h-4 w-4 accent-slate-900"
-                              />
+                        {addresses.map((item) => {
+                          const hasLocation =
+                            item.location?.latitude !== null &&
+                            item.location?.latitude !== undefined &&
+                            item.location?.longitude !== null &&
+                            item.location?.longitude !== undefined;
 
-                              <div className="min-w-0 text-sm">
-                                <strong className="text-slate-800 transition-colors group-hover:text-indigo-600">
-                                  {item.fullName}
-                                </strong>
+                          return (
+                            <label
+                              key={item._id}
+                              className={`group block cursor-pointer rounded-xl border p-3 transition-all sm:p-4 ${
+                                selectedAddress === item._id
+                                  ? "border-slate-900 bg-slate-50 shadow-sm"
+                                  : "border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/30"
+                              }`}
+                            >
+                              <div className="flex items-start gap-3">
+                                <input
+                                  type="radio"
+                                  name="address"
+                                  value={item._id}
+                                  checked={selectedAddress === item._id}
+                                  onChange={() => handleSelectAddress(item._id)}
+                                  className="mt-1 h-4 w-4 accent-slate-900"
+                                />
 
-                                <p className="mt-1 leading-5 text-slate-500">
-                                  {item.address}, {item.city}, {item.state}
-                                </p>
+                                <div className="min-w-0 text-sm">
+                                  <strong className="text-slate-800">
+                                    {item.fullName}
+                                  </strong>
 
-                                <p className="mt-1 text-slate-500">
-                                  {item.phone}
-                                </p>
-
-                                {item.pincode && (
-                                  <p className="mt-1 text-xs text-slate-400">
-                                    PIN: {item.pincode}
+                                  <p className="mt-1 leading-5 text-slate-500">
+                                    {item.address}, {item.city}, {item.state}
                                   </p>
-                                )}
+
+                                  <p className="mt-1 text-slate-500">
+                                    {item.phone}
+                                  </p>
+
+                                  {item.pincode && (
+                                    <p className="mt-1 text-xs text-slate-400">
+                                      PIN: {item.pincode}
+                                    </p>
+                                  )}
+
+                                  {/* LOCATION STATUS */}
+
+                                  {hasLocation ? (
+                                    <p className="mt-2 flex items-center gap-1 text-[11px] font-medium text-emerald-600">
+                                      <CheckCircle2 size={13} />
+                                      Location available — 30 KM check can apply
+                                    </p>
+                                  ) : (
+                                    <p className="mt-2 flex items-center gap-1 text-[11px] font-medium text-slate-500">
+                                      <MapPin size={13} />
+                                      No location — normal order mode
+                                    </p>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          </label>
-                        ))}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* DELIVERY WARNING */}
+
+                    {deliveryWarning && (
+                      <div className="mt-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
+                        <AlertTriangle
+                          size={18}
+                          className="mt-0.5 shrink-0 text-red-600"
+                        />
+
+                        <div>
+                          <p className="text-sm font-bold text-red-700">
+                            Delivery unavailable
+                          </p>
+
+                          <p className="mt-1 text-xs leading-5 text-red-600">
+                            {deliveryWarning}
+                          </p>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -590,12 +979,12 @@ function Checkout() {
               </div>
             </div>
 
-            {/* =================================================
-                RIGHT - ORDER SUMMARY
-            ================================================= */}
+            {/* ================================================= */}
+            {/* RIGHT - ORDER SUMMARY */}
+            {/* ================================================= */}
 
             <div className="h-fit space-y-4 lg:sticky lg:top-20">
-              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:border-slate-300 hover:shadow-[0_16px_40px_-12px_rgba(15,23,42,0.15)]">
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 {/* HEADER */}
 
                 <div className="border-b border-slate-100 px-5 py-4 sm:px-6">
@@ -613,6 +1002,8 @@ function Checkout() {
                     </div>
                   </div>
                 </div>
+
+                {/* SUMMARY BODY */}
 
                 <div className="p-5 sm:p-6">
                   {/* SUBTOTAL */}
@@ -676,13 +1067,13 @@ function Checkout() {
                           setCoupon(e.target.value);
                           setCouponApplied(false);
                         }}
-                        className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm transition-all outline-none placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-100"
+                        className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-slate-900 focus:bg-white"
                       />
 
                       <button
                         type="button"
                         onClick={() => setCouponApplied(true)}
-                        className="rounded-xl border border-slate-900 bg-slate-900 px-5 py-3 text-xs font-semibold text-white transition-all duration-300 hover:border-indigo-600 hover:bg-indigo-600 active:scale-[0.98]"
+                        className="rounded-xl border border-slate-900 bg-slate-900 px-5 py-3 text-xs font-semibold text-white transition hover:border-indigo-600 hover:bg-indigo-600"
                       >
                         Apply
                       </button>
@@ -701,7 +1092,7 @@ function Checkout() {
                     type="button"
                     onClick={handlePlaceOrder}
                     disabled={loading}
-                    className="mt-5 flex min-h-[50px] w-full items-center justify-center rounded-xl bg-slate-900 py-3.5 text-sm font-semibold text-white shadow-sm transition-all duration-300 hover:bg-indigo-600 hover:shadow-lg hover:shadow-indigo-100 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+                    className="mt-5 flex min-h-[50px] w-full items-center justify-center rounded-xl bg-slate-900 py-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {loading ? (
                       <span className="flex items-center justify-center gap-2">
@@ -720,9 +1111,7 @@ function Checkout() {
                 </div>
               </div>
 
-              {/* =================================================
-                  TRUST BADGES
-              ================================================= */}
+              {/* TRUST BADGES */}
 
               <div className="grid grid-cols-3 gap-2">
                 {[
@@ -741,14 +1130,14 @@ function Checkout() {
                 ].map(({ Icon, label }) => (
                   <div
                     key={label}
-                    className="group flex flex-col items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-1 py-3 text-center transition-all duration-300 hover:border-indigo-200 hover:bg-indigo-50/40 hover:shadow-sm"
+                    className="group flex flex-col items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-1 py-3 text-center transition hover:border-indigo-200 hover:bg-indigo-50/40"
                   >
                     <Icon
                       size={18}
-                      className="text-slate-800 transition-colors duration-200 group-hover:text-indigo-600"
+                      className="text-slate-800 group-hover:text-indigo-600"
                     />
 
-                    <span className="text-[9px] font-medium text-slate-500 transition-colors group-hover:text-indigo-600 sm:text-[10px]">
+                    <span className="text-[9px] font-medium text-slate-500 group-hover:text-indigo-600 sm:text-[10px]">
                       {label}
                     </span>
                   </div>

@@ -1,9 +1,16 @@
 const Product = require("../models/Product");
+const User = require("../models/User");
 const cloudinary = require("../config/cloudinary");
 
-// ==========================
+// ======================================================
+// DELIVERY CONFIG
+// ======================================================
+
+const DELIVERY_RADIUS_KM = 30;
+
+// ======================================================
 // UPLOAD IMAGE TO CLOUDINARY
-// ==========================
+// ======================================================
 
 const uploadToCloudinary = async (buffer) => {
   console.log("UPLOADING TO CLOUDINARY...");
@@ -17,24 +24,161 @@ const uploadToCloudinary = async (buffer) => {
   return result;
 };
 
-// ==========================
-// ADD PRODUCT (SELLER)
-// ==========================
+// ======================================================
+// HAVERSINE DISTANCE
+// ======================================================
+
+const calculateDistanceKm = (lat1, lon1, lat2, lon2) => {
+  const earthRadiusKm = 6371;
+
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return earthRadiusKm * c;
+};
+
+// ======================================================
+// VALIDATE COORDINATES
+// ======================================================
+
+const getValidCoordinates = (latitude, longitude) => {
+  if (
+    latitude === undefined ||
+    latitude === null ||
+    longitude === undefined ||
+    longitude === null ||
+    latitude === "" ||
+    longitude === ""
+  ) {
+    return null;
+  }
+
+  const lat = Number(latitude);
+  const lng = Number(longitude);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
+  }
+
+  if (lat < -90 || lat > 90) {
+    return null;
+  }
+
+  if (lng < -180 || lng > 180) {
+    return null;
+  }
+
+  return {
+    latitude: lat,
+    longitude: lng,
+  };
+};
+
+// ======================================================
+// GET SELLER COORDINATES
+// ======================================================
+
+const getSellerCoordinates = (seller) => {
+  if (!seller) {
+    return null;
+  }
+
+  return getValidCoordinates(
+    seller.location?.latitude,
+    seller.location?.longitude,
+  );
+};
+
+// ======================================================
+// CHECK DELIVERY DISTANCE
+//
+// IMPORTANT:
+// If customer OR seller location is missing,
+// delivery remains allowed normally.
+//
+// Only when BOTH locations exist do we
+// enforce the 30 KM rule.
+// ======================================================
+
+const checkDeliveryDistance = (customerLocation, seller) => {
+  if (!customerLocation) {
+    return {
+      available: true,
+      distance: null,
+      locationChecked: false,
+    };
+  }
+
+  const sellerLocation = getSellerCoordinates(seller);
+
+  // Seller location is optional.
+  // If seller has not configured location,
+  // do NOT block the product.
+  if (!sellerLocation) {
+    return {
+      available: true,
+      distance: null,
+      locationChecked: false,
+    };
+  }
+
+  const distance = Number(
+    calculateDistanceKm(
+      customerLocation.latitude,
+      customerLocation.longitude,
+      sellerLocation.latitude,
+      sellerLocation.longitude,
+    ).toFixed(2),
+  );
+
+  return {
+    available: distance <= DELIVERY_RADIUS_KM,
+    distance,
+    locationChecked: true,
+  };
+};
+
+// ======================================================
+// ADD PRODUCT
+// ======================================================
 
 exports.addProduct = async (req, res) => {
   try {
-    const {
-      title,
-      description,
-      features,
-      price,
-      category,
-      stock,
-    } = req.body;
+    const { title, description, features, price, category, stock } = req.body;
+
+    // --------------------------------------------------
+    // CHECK SELLER
+    // --------------------------------------------------
+
+    const seller = await User.findById(req.user.id).select("role location");
+
+    if (!seller) {
+      return res.status(404).json({
+        message: "Seller not found",
+      });
+    }
+
+    if (seller.role !== "seller") {
+      return res.status(403).json({
+        message: "Only sellers can add products",
+      });
+    }
+
+    // --------------------------------------------------
+    // UPLOAD IMAGES
+    // --------------------------------------------------
 
     let images = [];
 
-    // Upload multiple images
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
         const result = await uploadToCloudinary(file.buffer);
@@ -44,6 +188,10 @@ exports.addProduct = async (req, res) => {
         });
       }
     }
+
+    // --------------------------------------------------
+    // CREATE PRODUCT
+    // --------------------------------------------------
 
     const product = await Product.create({
       title,
@@ -58,52 +206,78 @@ exports.addProduct = async (req, res) => {
 
       price: Number(price),
       category,
-
       images,
-
       stock: Number(stock) || 0,
-
       seller: req.user.id,
 
       approvalStatus: "approved",
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       message: "Product Added Successfully",
       product,
     });
   } catch (error) {
     console.log("ADD PRODUCT ERROR =>", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       message: error.message,
     });
   }
 };
 
-// ==========================
+// ======================================================
 // GET ALL PRODUCTS
-// SEARCH + FILTER + SORT + STATS
-// ==========================
+//
+// SEARCH
+// FILTER
+// SORT
+// STATS
+// OPTIONAL 30 KM DELIVERY FILTER
+// ======================================================
 
 exports.getProducts = async (req, res) => {
   try {
     const keyword = req.query.keyword || "";
     const category = req.query.category || "";
 
-    const minPrice = Number(req.query.minPrice) || 0;
+    const minPrice =
+      req.query.minPrice !== undefined && req.query.minPrice !== ""
+        ? Number(req.query.minPrice)
+        : 0;
+
     const maxPrice =
-      Number(req.query.maxPrice) || 999999999;
+      req.query.maxPrice !== undefined && req.query.maxPrice !== ""
+        ? Number(req.query.maxPrice)
+        : 999999999;
 
-    const page = Number(req.query.page) || 1;
-
+    const page = Math.max(Number(req.query.page) || 1, 1);
     const limit = 24;
 
-    const skip = (page - 1) * limit;
+    // --------------------------------------------------
+    // CUSTOMER LOCATION
+    // --------------------------------------------------
 
-    // ==========================================
-    // PRODUCT QUERY
-    // ==========================================
+    const customerLocation = getValidCoordinates(
+      req.query.latitude,
+      req.query.longitude,
+    );
+
+    // --------------------------------------------------
+    // BASE QUERY
+    //
+    // IMPORTANT:
+    // We DO NOT filter seller at MongoDB query level.
+    //
+    // Why?
+    // Seller location is optional.
+    //
+    // If seller has no location:
+    // => product should still appear.
+    //
+    // If both locations exist:
+    // => distance is checked below.
+    // --------------------------------------------------
 
     const query = {
       approvalStatus: "approved",
@@ -119,125 +293,152 @@ exports.getProducts = async (req, res) => {
       },
     };
 
-    // Category filter
     if (category) {
       query.category = category;
     }
 
-    // ==========================================
-    // TOTAL PRODUCTS
-    // ==========================================
+    // --------------------------------------------------
+    // GET PRODUCTS
+    //
+    // Fetch enough products first so that after
+    // 30 KM filtering pagination remains correct.
+    // --------------------------------------------------
 
-    const totalProducts =
-      await Product.countDocuments(query);
+    let products = await Product.find(query)
+      .populate("seller", "name email location")
+      .sort(
+        req.query.sort === "priceLow"
+          ? { price: 1 }
+          : req.query.sort === "priceHigh"
+            ? { price: -1 }
+            : req.query.sort === "rating"
+              ? { rating: -1 }
+              : { createdAt: -1 },
+      );
 
-    // ==========================================
-    // TOTAL UNIQUE SELLERS
-    // ==========================================
+    // --------------------------------------------------
+    // OPTIONAL DELIVERY FILTER
+    // --------------------------------------------------
 
-    const uniqueSellers =
-      await Product.distinct("seller", {
-        approvalStatus: "approved",
-      });
+    const processedProducts = [];
 
-    const totalSellers = uniqueSellers.length;
+    for (const product of products) {
+      const productObject = product.toObject();
 
-    // ==========================================
-    // AVERAGE PRODUCT RATING
-    // ==========================================
+      const deliveryCheck = checkDeliveryDistance(
+        customerLocation,
+        product.seller,
+      );
 
-    const ratingStats =
-      await Product.aggregate([
-        {
-          $match: {
-            approvalStatus: "approved",
+      // ------------------------------------------------
+      // CUSTOMER LOCATION + SELLER LOCATION
+      // BOTH AVAILABLE
+      // ------------------------------------------------
 
-            rating: {
-              $gt: 0,
-            },
-          },
-        },
+      if (deliveryCheck.locationChecked && !deliveryCheck.available) {
+        // Product is outside 30 KM.
+        // Do not show it in product listing.
+        continue;
+      }
 
-        {
-          $group: {
-            _id: null,
+      productObject.distance = deliveryCheck.distance;
 
-            averageRating: {
-              $avg: "$rating",
-            },
-          },
-        },
-      ]);
+      productObject.deliveryRadiusKm = DELIVERY_RADIUS_KM;
+
+      productObject.available = true;
+
+      productObject.deliveryLocationChecked = deliveryCheck.locationChecked;
+
+      processedProducts.push(productObject);
+    }
+
+    // --------------------------------------------------
+    // TOTAL AFTER DELIVERY FILTER
+    // --------------------------------------------------
+
+    const totalProducts = processedProducts.length;
+
+    // --------------------------------------------------
+    // UNIQUE SELLERS
+    // --------------------------------------------------
+
+    const uniqueSellerIds = new Set();
+
+    processedProducts.forEach((product) => {
+      const sellerId = product.seller?._id?.toString();
+
+      if (sellerId) {
+        uniqueSellerIds.add(sellerId);
+      }
+    });
+
+    const totalSellers = uniqueSellerIds.size;
+
+    // --------------------------------------------------
+    // AVERAGE RATING
+    // --------------------------------------------------
+
+    const ratedProducts = processedProducts.filter(
+      (product) =>
+        Number.isFinite(Number(product.rating)) && Number(product.rating) > 0,
+    );
 
     const averageRating =
-      ratingStats.length > 0
+      ratedProducts.length > 0
         ? Number(
-            ratingStats[0].averageRating.toFixed(1)
+            (
+              ratedProducts.reduce(
+                (sum, product) => sum + Number(product.rating),
+                0,
+              ) / ratedProducts.length
+            ).toFixed(1),
           )
         : 0;
 
-    // ==========================================
-    // GET PRODUCTS
-    // ==========================================
-
-    let productsQuery = Product.find(query).populate(
-      "seller",
-      "name email"
-    );
-
-    // ==========================================
-    // SORTING
-    // ==========================================
-
-    if (req.query.sort === "priceLow") {
-      productsQuery = productsQuery.sort({
-        price: 1,
-      });
-    }
-
-    if (req.query.sort === "priceHigh") {
-      productsQuery = productsQuery.sort({
-        price: -1,
-      });
-    }
-
-    if (req.query.sort === "rating") {
-      productsQuery = productsQuery.sort({
-        rating: -1,
-      });
-    }
-
-    // ==========================================
+    // --------------------------------------------------
     // PAGINATION
-    // ==========================================
+    // --------------------------------------------------
 
-    const products =
-      await productsQuery
-        .skip(skip)
-        .limit(limit);
+    const skip = (page - 1) * limit;
 
-    // ==========================================
-    // FINAL RESPONSE
-    // ==========================================
+    const paginatedProducts = processedProducts.slice(skip, skip + limit);
 
-    res.json({
+    // --------------------------------------------------
+    // RESPONSE
+    // --------------------------------------------------
+
+    return res.json({
       success: true,
 
-      count: products.length,
+      count: paginatedProducts.length,
 
       totalProducts,
 
-      totalPages: Math.ceil(
-        totalProducts / limit
-      ),
+      totalPages: Math.ceil(totalProducts / limit),
 
       currentPage: page,
 
-      products,
+      products: paginatedProducts,
 
-      // ========================================
-      // HOMEPAGE REAL STATS
-      // ========================================
+      // ------------------------------------------------
+      // LOCATION INFORMATION
+      // ------------------------------------------------
+
+      location: customerLocation
+        ? {
+            latitude: customerLocation.latitude,
+            longitude: customerLocation.longitude,
+            radiusKm: DELIVERY_RADIUS_KM,
+          }
+        : null,
+
+      locationRequired: !customerLocation,
+
+      deliveryRadiusKm: DELIVERY_RADIUS_KM,
+
+      // ------------------------------------------------
+      // HOMEPAGE STATS
+      // ------------------------------------------------
 
       stats: {
         totalProducts,
@@ -248,72 +449,175 @@ exports.getProducts = async (req, res) => {
   } catch (error) {
     console.log("GET PRODUCTS ERROR =>", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
   }
 };
 
-// ==========================
+// ======================================================
 // GET SINGLE PRODUCT
-// ==========================
+// ======================================================
 
 exports.getSingleProduct = async (req, res) => {
   try {
-    const product =
-      await Product.findById(req.params.id)
-        .populate("seller", "name email");
+    const product = await Product.findById(req.params.id).populate(
+      "seller",
+      "name email location",
+    );
 
     if (!product) {
       return res.status(404).json({
+        success: false,
         message: "Product not found",
       });
     }
 
-    // ==========================================
-    // RELATED PRODUCTS
-    // ==========================================
+    // --------------------------------------------------
+    // CUSTOMER LOCATION
+    // --------------------------------------------------
 
-    const relatedProducts =
-      await Product.find({
-        category: product.category,
-
-        _id: {
-          $ne: product._id,
-        },
-
-        approvalStatus: "approved",
-      }).limit(4);
-
-    res.json({
-      success: true,
-
-      product,
-
-      relatedProducts,
-    });
-  } catch (error) {
-    console.log(
-      "GET SINGLE PRODUCT ERROR =>",
-      error
+    const customerLocation = getValidCoordinates(
+      req.query.latitude,
+      req.query.longitude,
     );
 
-    res.status(500).json({
+    // --------------------------------------------------
+    // DELIVERY CHECK
+    // --------------------------------------------------
+
+    const deliveryCheck = checkDeliveryDistance(
+      customerLocation,
+      product.seller,
+    );
+
+    // --------------------------------------------------
+    // BOTH LOCATIONS AVAILABLE + OUTSIDE 30 KM
+    // --------------------------------------------------
+
+    if (deliveryCheck.locationChecked && !deliveryCheck.available) {
+      return res.status(403).json({
+        success: false,
+
+        available: false,
+
+        distance: deliveryCheck.distance,
+
+        deliveryRadiusKm: DELIVERY_RADIUS_KM,
+
+        message: "This product is outside your 30 KM delivery range.",
+
+        code: "OUTSIDE_DELIVERY_RADIUS",
+      });
+    }
+
+    // --------------------------------------------------
+    // RELATED PRODUCTS
+    // --------------------------------------------------
+
+    const relatedProductsRaw = await Product.find({
+      category: product.category,
+
+      _id: {
+        $ne: product._id,
+      },
+
+      approvalStatus: "approved",
+    })
+      .populate("seller", "name email location")
+      .sort({
+        createdAt: -1,
+      })
+      .limit(20);
+
+    // --------------------------------------------------
+    // FILTER RELATED PRODUCTS
+    // --------------------------------------------------
+
+    const relatedProducts = [];
+
+    for (const relatedProduct of relatedProductsRaw) {
+      const relatedObject = relatedProduct.toObject();
+
+      const relatedDeliveryCheck = checkDeliveryDistance(
+        customerLocation,
+        relatedProduct.seller,
+      );
+
+      // If both locations exist and related seller
+      // is outside 30 KM, skip it.
+      if (
+        relatedDeliveryCheck.locationChecked &&
+        !relatedDeliveryCheck.available
+      ) {
+        continue;
+      }
+
+      relatedObject.distance = relatedDeliveryCheck.distance;
+
+      relatedObject.deliveryRadiusKm = DELIVERY_RADIUS_KM;
+
+      relatedObject.available = true;
+
+      relatedProducts.push(relatedObject);
+
+      if (relatedProducts.length >= 4) {
+        break;
+      }
+    }
+
+    // --------------------------------------------------
+    // PRODUCT RESPONSE OBJECT
+    // --------------------------------------------------
+
+    const productObject = product.toObject();
+
+    productObject.distance = deliveryCheck.distance;
+
+    productObject.deliveryRadiusKm = DELIVERY_RADIUS_KM;
+
+    productObject.available = true;
+
+    productObject.deliveryLocationChecked = deliveryCheck.locationChecked;
+
+    // --------------------------------------------------
+    // RESPONSE
+    // --------------------------------------------------
+
+    return res.json({
+      success: true,
+
+      product: productObject,
+
+      relatedProducts,
+
+      deliveryRadiusKm: DELIVERY_RADIUS_KM,
+
+      location: customerLocation
+        ? {
+            latitude: customerLocation.latitude,
+            longitude: customerLocation.longitude,
+          }
+        : null,
+    });
+  } catch (error) {
+    console.log("GET SINGLE PRODUCT ERROR =>", error);
+
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
   }
 };
 
-// ==========================
+// ======================================================
 // UPDATE PRODUCT
-// ==========================
+// ======================================================
 
 exports.updateProduct = async (req, res) => {
   try {
-    const product =
-      await Product.findById(req.params.id);
+    const product = await Product.findById(req.params.id);
 
     if (!product) {
       return res.status(404).json({
@@ -321,30 +625,30 @@ exports.updateProduct = async (req, res) => {
       });
     }
 
-    // ==========================================
+    // --------------------------------------------------
     // OWNER CHECK
-    // ==========================================
+    // --------------------------------------------------
 
-    if (
-      product.seller.toString() !== req.user.id
-    ) {
+    if (product.seller.toString() !== req.user.id) {
       return res.status(403).json({
-        message:
-          "You can update only your product",
+        message: "You can update only your product",
       });
     }
 
-    const updatedProduct =
-      await Product.findByIdAndUpdate(
-        req.params.id,
-        req.body,
-        {
-          new: true,
-          runValidators: true,
-        }
-      );
+    // --------------------------------------------------
+    // UPDATE
+    // --------------------------------------------------
 
-    res.json({
+    const updatedProduct = await Product.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      {
+        new: true,
+        runValidators: true,
+      },
+    );
+
+    return res.json({
       success: true,
 
       message: "Product Updated",
@@ -352,26 +656,22 @@ exports.updateProduct = async (req, res) => {
       product: updatedProduct,
     });
   } catch (error) {
-    console.log(
-      "UPDATE PRODUCT ERROR =>",
-      error
-    );
+    console.log("UPDATE PRODUCT ERROR =>", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
   }
 };
 
-// ==========================
+// ======================================================
 // DELETE PRODUCT
-// ==========================
+// ======================================================
 
 exports.deleteProduct = async (req, res) => {
   try {
-    const product =
-      await Product.findById(req.params.id);
+    const product = await Product.findById(req.params.id);
 
     if (!product) {
       return res.status(404).json({
@@ -379,54 +679,51 @@ exports.deleteProduct = async (req, res) => {
       });
     }
 
-    // ==========================================
+    // --------------------------------------------------
     // OWNER CHECK
-    // ==========================================
+    // --------------------------------------------------
 
-    if (
-      product.seller.toString() !== req.user.id
-    ) {
+    if (product.seller.toString() !== req.user.id) {
       return res.status(403).json({
-        message:
-          "You can delete only your product",
+        message: "You can delete only your product",
       });
     }
 
-    await Product.findByIdAndDelete(
-      req.params.id
-    );
+    // --------------------------------------------------
+    // DELETE
+    // --------------------------------------------------
 
-    res.json({
+    await Product.findByIdAndDelete(req.params.id);
+
+    return res.json({
       success: true,
 
-      message:
-        "Product Deleted Successfully",
+      message: "Product Deleted Successfully",
     });
   } catch (error) {
-    console.log(
-      "DELETE PRODUCT ERROR =>",
-      error
-    );
+    console.log("DELETE PRODUCT ERROR =>", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
   }
 };
 
-// ==========================
-// MY PRODUCTS (SELLER)
-// ==========================
+// ======================================================
+// MY PRODUCTS
+// SELLER
+// ======================================================
 
 exports.getMyProducts = async (req, res) => {
   try {
-    const products =
-      await Product.find({
-        seller: req.user.id,
-      });
+    const products = await Product.find({
+      seller: req.user.id,
+    }).sort({
+      createdAt: -1,
+    });
 
-    res.json({
+    return res.json({
       success: true,
 
       count: products.length,
@@ -434,12 +731,9 @@ exports.getMyProducts = async (req, res) => {
       products,
     });
   } catch (error) {
-    console.log(
-      "GET MY PRODUCTS ERROR =>",
-      error
-    );
+    console.log("GET MY PRODUCTS ERROR =>", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });

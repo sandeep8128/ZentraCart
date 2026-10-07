@@ -1,10 +1,15 @@
 import { useEffect, useState } from "react";
+
 import { Link, useParams } from "react-router-dom";
+
 import { useSelector, useDispatch } from "react-redux";
 
 import API from "../services/api";
+
 import Navbar from "../components/Navbar";
+
 import ProductCard from "../components/ProductCard";
+
 import toast from "react-hot-toast";
 
 import {
@@ -87,16 +92,75 @@ function ProductDetails() {
   const [activeTab, setActiveTab] = useState("description");
 
   // =====================================================
+  // OPTIONAL DELIVERY LOCATION
+  // =====================================================
+
+  const [location, setLocation] = useState(null);
+
+  // =====================================================
   // FETCH PRODUCT
   // =====================================================
 
   const fetchProduct = async () => {
     try {
-      const res = await API.get(`/products/${id}`);
+      let savedLocation = null;
+
+      // =================================================
+      // LOAD OPTIONAL LOCATION
+      // =================================================
+
+      try {
+        const storedLocation = localStorage.getItem("zentraCartLocation");
+
+        if (storedLocation) {
+          const parsedLocation = JSON.parse(storedLocation);
+
+          if (
+            Number.isFinite(Number(parsedLocation.latitude)) &&
+            Number.isFinite(Number(parsedLocation.longitude))
+          ) {
+            savedLocation = {
+              latitude: Number(parsedLocation.latitude),
+              longitude: Number(parsedLocation.longitude),
+            };
+
+            setLocation(savedLocation);
+          }
+        }
+      } catch (locationError) {
+        console.log("LOCATION LOAD ERROR:", locationError);
+      }
+
+      // =================================================
+      // PRODUCT API URL
+      // =================================================
+
+      let productUrl = `/products/${id}`;
+
+      // Location available hai to coordinates send karo
+      if (savedLocation) {
+        const params = new URLSearchParams();
+
+        params.append("latitude", savedLocation.latitude);
+
+        params.append("longitude", savedLocation.longitude);
+
+        productUrl += `?${params.toString()}`;
+      }
+
+      // =================================================
+      // FETCH PRODUCT
+      // =================================================
+
+      const res = await API.get(productUrl);
 
       setProduct(res.data.product);
 
       setRelatedProducts(res.data.relatedProducts || []);
+
+      // =================================================
+      // RECENT PRODUCTS
+      // =================================================
 
       let viewed = JSON.parse(localStorage.getItem("recentProducts")) || [];
 
@@ -108,7 +172,7 @@ function ProductDetails() {
 
       localStorage.setItem("recentProducts", JSON.stringify(viewed));
     } catch (error) {
-      console.log(error.response?.data);
+      console.log(error.response?.data || error.message);
     }
   };
 
@@ -384,7 +448,7 @@ function ProductDetails() {
                             selectedImage === img.url
                               ? "border-slate-900 shadow-md"
                               : "border-slate-200 hover:border-indigo-400"
-                          } `}
+                          }`}
                         />
                       ))}
                     </div>
@@ -458,7 +522,55 @@ function ProductDetails() {
                   </Link>
                 </p>
 
-                {/* ACTION BUTTONS */}
+                {/* =================================================
+                    DELIVERY DISTANCE
+                ================================================= */}
+
+                {product.distance !== undefined &&
+                  product.distance !== null &&
+                  Number.isFinite(Number(product.distance)) && (
+                    <div className="mb-6">
+                      {Number(product.distance) <= 30 ? (
+                        <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-lg">
+                            📍
+                          </div>
+
+                          <div>
+                            <p className="text-sm font-semibold text-emerald-700">
+                              Available for Delivery
+                            </p>
+
+                            <p className="mt-0.5 text-xs text-emerald-600">
+                              Seller is {Number(product.distance).toFixed(1)} KM
+                              away and within your 30 KM delivery range.
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-lg">
+                            ⚠️
+                          </div>
+
+                          <div>
+                            <p className="text-sm font-semibold text-amber-700">
+                              Outside Delivery Range
+                            </p>
+
+                            <p className="mt-0.5 text-xs text-amber-600">
+                              Seller is {Number(product.distance).toFixed(1)} KM
+                              away. Maximum delivery distance is 30 KM.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                {/* =================================================
+                    ACTION BUTTONS
+                ================================================= */}
 
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <button
@@ -525,7 +637,7 @@ function ProductDetails() {
                         activeTab === "description"
                           ? "border-slate-900 text-slate-900"
                           : "border-transparent text-slate-400 hover:border-indigo-300 hover:text-indigo-600"
-                      } `}
+                      }`}
                     >
                       Description
                     </button>
@@ -537,7 +649,7 @@ function ProductDetails() {
                           activeTab === "specifications"
                             ? "border-slate-900 text-slate-900"
                             : "border-transparent text-slate-400 hover:border-indigo-300 hover:text-indigo-600"
-                        } `}
+                        }`}
                       >
                         Specifications
                       </button>

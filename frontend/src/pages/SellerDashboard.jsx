@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
+
 import { useSelector } from "react-redux";
+
 import API from "../services/api";
+
 import Navbar from "../components/Navbar";
+
 import toast from "react-hot-toast";
 
 import {
@@ -17,14 +21,20 @@ import {
   Trash2,
   ImageOff,
   ImagePlus,
+  MapPin,
+  LocateFixed,
 } from "lucide-react";
 
 function StatCard({ label, value, sub, icon: Icon, tone }) {
   const tones = {
     indigo: "bg-indigo-50 text-indigo-600",
+
     emerald: "bg-emerald-50 text-emerald-600",
+
     sky: "bg-sky-50 text-sky-600",
+
     amber: "bg-amber-50 text-amber-600",
+
     rose: "bg-rose-50 text-rose-600",
   };
 
@@ -51,8 +61,11 @@ function StatCard({ label, value, sub, icon: Icon, tone }) {
 
 const STATUS_TABS = [
   { key: "all", label: "All" },
+
   { key: "inStock", label: "In Stock" },
+
   { key: "lowStock", label: "Low Stock" },
+
   { key: "outOfStock", label: "Out of Stock" },
 ];
 
@@ -62,29 +75,156 @@ function SellerDashboard() {
   const [products, setProducts] = useState([]);
 
   const [title, setTitle] = useState("");
+
   const [description, setDescription] = useState("");
+
   const [features, setFeatures] = useState("");
+
   const [price, setPrice] = useState("");
+
   const [category, setCategory] = useState("");
+
   const [stock, setStock] = useState("");
+
   const [images, setImages] = useState([]);
 
   const [editProduct, setEditProduct] = useState(null);
+
   const [editTitle, setEditTitle] = useState("");
+
   const [editPrice, setEditPrice] = useState("");
+
   const [editStock, setEditStock] = useState("");
+
   const [editCategory, setEditCategory] = useState("");
 
   const [addOpen, setAddOpen] = useState(false);
+
   const [loading, setLoading] = useState(true);
+
   const [search, setSearch] = useState("");
+
   const [statusFilter, setStatusFilter] = useState("all");
 
   const [addingProduct, setAddingProduct] = useState(false);
+
   const [updatingProduct, setUpdatingProduct] = useState(false);
+
   const [deletingProduct, setDeletingProduct] = useState(null);
 
+  // ================= SELLER LOCATION =================
+
+  const [sellerLocation, setSellerLocation] = useState(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationSaving, setLocationSaving] = useState(false);
+
+  // ================= SELLER LOCATION =================
+
+  const fetchSellerLocation = async () => {
+    if (!token) return;
+
+    try {
+      const res = await API.get("/auth/location", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setSellerLocation(res.data.location || null);
+    } catch (error) {
+      console.log(
+        "Seller location fetch error:",
+        error.response?.data || error.message,
+      );
+    }
+  };
+
+  const handleUseSellerLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error("Geolocation is not supported by this browser.");
+      return;
+    }
+
+    setLocationLoading(true);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const latitude = Number(position.coords.latitude);
+        const longitude = Number(position.coords.longitude);
+
+        if (
+          !Number.isFinite(latitude) ||
+          !Number.isFinite(longitude) ||
+          latitude < -90 ||
+          latitude > 90 ||
+          longitude < -180 ||
+          longitude > 180
+        ) {
+          setLocationLoading(false);
+          toast.error("Invalid location detected.");
+          return;
+        }
+
+        try {
+          setLocationSaving(true);
+          const res = await API.put(
+            "/auth/location",
+            { latitude, longitude, address: "Seller shop location" },
+            { headers: { Authorization: `Bearer ${token}` } },
+          );
+
+          setSellerLocation(
+            res.data.location || {
+              latitude,
+              longitude,
+              address: "Seller shop location",
+              updatedAt: new Date(),
+            },
+          );
+          toast.success("Shop location saved successfully.");
+        } catch (error) {
+          toast.error(
+            error.response?.data?.message || "Failed to save shop location.",
+          );
+        } finally {
+          setLocationSaving(false);
+          setLocationLoading(false);
+        }
+      },
+      (error) => {
+        setLocationLoading(false);
+        if (error.code === error.PERMISSION_DENIED) {
+          toast.error("Location permission denied.");
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          toast.error("Unable to detect your location.");
+        } else if (error.code === error.TIMEOUT) {
+          toast.error("Location request timed out.");
+        } else {
+          toast.error("Unable to get your location.");
+        }
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+    );
+  };
+
+  const handleClearSellerLocation = async () => {
+    if (!token) return;
+
+    try {
+      setLocationSaving(true);
+      const res = await API.delete("/auth/location", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setSellerLocation(res.data.location || null);
+      toast.success(res.data.message || "Shop location removed successfully.");
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message || "Failed to remove shop location.",
+      );
+    } finally {
+      setLocationSaving(false);
+    }
+  };
+
   // ================= FETCH PRODUCTS =================
+
   const fetchMyProducts = async () => {
     try {
       setLoading(true);
@@ -104,6 +244,7 @@ function SellerDashboard() {
   };
 
   // ================= DELETE PRODUCT =================
+
   const handleDelete = async (id) => {
     try {
       setDeletingProduct(id);
@@ -115,6 +256,7 @@ function SellerDashboard() {
       });
 
       toast.success(res.data.message);
+
       await fetchMyProducts();
     } catch (error) {
       toast.error(error.response?.data?.message || "Delete failed");
@@ -124,26 +266,31 @@ function SellerDashboard() {
   };
 
   // ================= ADD PRODUCT =================
+
   const handleAddProduct = async (e) => {
     e.preventDefault();
 
     if (!title.trim()) {
       toast.error("Product title is required");
+
       return;
     }
 
     if (!price || Number(price) < 0) {
       toast.error("Enter a valid price");
+
       return;
     }
 
     if (!category.trim()) {
       toast.error("Category is required");
+
       return;
     }
 
     if (!stock || Number(stock) < 0) {
       toast.error("Enter a valid stock quantity");
+
       return;
     }
 
@@ -153,10 +300,15 @@ function SellerDashboard() {
       const formData = new FormData();
 
       formData.append("title", title.trim());
+
       formData.append("description", description.trim());
+
       formData.append("features", features);
+
       formData.append("price", price);
+
       formData.append("category", category.trim());
+
       formData.append("stock", stock);
 
       images.forEach((image) => {
@@ -166,6 +318,7 @@ function SellerDashboard() {
       const res = await API.post("/products/add", formData, {
         headers: {
           Authorization: `Bearer ${token}`,
+
           "Content-Type": "multipart/form-data",
         },
       });
@@ -173,11 +326,17 @@ function SellerDashboard() {
       toast.success(res.data.message);
 
       setTitle("");
+
       setDescription("");
+
       setFeatures("");
+
       setPrice("");
+
       setCategory("");
+
       setStock("");
+
       setImages([]);
 
       setAddOpen(false);
@@ -191,20 +350,27 @@ function SellerDashboard() {
   };
 
   // ================= OPEN EDIT =================
+
   const handleEdit = (product) => {
     setEditProduct(product);
+
     setEditTitle(product.title || "");
+
     setEditPrice(product.price || "");
+
     setEditStock(product.stock ?? "");
+
     setEditCategory(product.category || "");
   };
 
   // ================= UPDATE PRODUCT =================
+
   const handleUpdateProduct = async () => {
     if (!editProduct) return;
 
     if (!editTitle.trim()) {
       toast.error("Product title is required");
+
       return;
     }
 
@@ -213,12 +379,17 @@ function SellerDashboard() {
 
       const res = await API.put(
         `/products/${editProduct._id}`,
+
         {
           title: editTitle.trim(),
+
           price: editPrice,
+
           stock: editStock,
+
           category: editCategory.trim(),
         },
+
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -239,12 +410,14 @@ function SellerDashboard() {
   };
 
   // ================= STATS =================
+
   const totalProducts = products.length;
 
   const totalStock = products.reduce((sum, p) => sum + Number(p.stock || 0), 0);
 
   const totalValue = products.reduce(
     (sum, p) => sum + Number(p.price || 0) * Number(p.stock || 0),
+
     0,
   );
 
@@ -253,9 +426,12 @@ function SellerDashboard() {
   const outOfStock = products.filter((p) => Number(p.stock) === 0).length;
 
   // ================= FILTER PRODUCTS =================
+
   const visibleProducts = useMemo(() => {
     return products
+
       .filter((p) => p.title?.toLowerCase().includes(search.toLowerCase()))
+
       .filter((p) => {
         if (statusFilter === "inStock") {
           return Number(p.stock) > 5;
@@ -280,6 +456,7 @@ function SellerDashboard() {
   }, [token]);
 
   // ================= INPUT STYLE =================
+
   const inputCls =
     "w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-100 placeholder:text-slate-400";
 
@@ -290,6 +467,7 @@ function SellerDashboard() {
       <main className="min-h-screen bg-gray-50 px-4 py-6 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">
           {/* ================= HEADER ================= */}
+
           <div className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-[10px] font-bold tracking-[0.2em] text-indigo-600 uppercase sm:text-[11px]">
@@ -315,7 +493,94 @@ function SellerDashboard() {
             </button>
           </div>
 
+          {/* ================= SELLER LOCATION ================= */}
+
+          <div className="mb-7 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-start gap-3">
+                <div
+                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+                    sellerLocation?.latitude != null &&
+                    sellerLocation?.longitude != null
+                      ? "bg-emerald-50 text-emerald-600"
+                      : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  <MapPin size={19} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-slate-900">
+                    Shop Delivery Location
+                  </p>
+                  {sellerLocation?.latitude != null &&
+                  sellerLocation?.longitude != null ? (
+                    <>
+                      <p className="mt-0.5 text-xs font-medium text-emerald-600">
+                        30 KM delivery range is active
+                      </p>
+                      <p className="mt-1 text-[11px] break-all text-slate-400">
+                        {Number(sellerLocation.latitude).toFixed(6)},{" "}
+                        {Number(sellerLocation.longitude).toFixed(6)}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="mt-0.5 max-w-xl text-xs leading-relaxed text-slate-400">
+                      Optional • Add your shop location to enable distance-based
+                      delivery for customers.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
+                <button
+                  type="button"
+                  onClick={handleUseSellerLocation}
+                  disabled={locationLoading || locationSaving}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {locationLoading || locationSaving ? (
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                  ) : (
+                    <LocateFixed size={15} />
+                  )}
+                  {locationLoading || locationSaving
+                    ? "Saving Location..."
+                    : sellerLocation?.latitude != null &&
+                        sellerLocation?.longitude != null
+                      ? "Update Location"
+                      : "Use My Current Location"}
+                </button>
+
+                {sellerLocation?.latitude != null &&
+                  sellerLocation?.longitude != null && (
+                    <button
+                      type="button"
+                      onClick={handleClearSellerLocation}
+                      disabled={locationSaving}
+                      className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <X size={15} />
+                      Clear Location
+                    </button>
+                  )}
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100 bg-slate-50/70 px-4 py-3 sm:px-5">
+              <p className="text-[11px] leading-relaxed text-slate-500">
+                <span className="font-semibold text-slate-700">
+                  Delivery rule:
+                </span>{" "}
+                when both customer and seller locations are available,
+                ZentraCart checks the distance. Orders within 30 KM are allowed.
+                If either location is unavailable, normal ordering continues.
+              </p>
+            </div>
+          </div>
+
           {/* ================= STATS ================= */}
+
           <div className="mb-7 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <StatCard
               label="Total Products"
@@ -359,9 +624,11 @@ function SellerDashboard() {
           </div>
 
           {/* ================= TOOLBAR ================= */}
+
           <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               {/* FILTERS */}
+
               <div className="flex w-full gap-2 overflow-x-auto pb-1 lg:w-auto">
                 {STATUS_TABS.map((tab) => (
                   <button
@@ -379,6 +646,7 @@ function SellerDashboard() {
               </div>
 
               {/* SEARCH */}
+
               <div className="relative w-full lg:w-72">
                 <Search
                   size={16}
@@ -397,8 +665,10 @@ function SellerDashboard() {
           </div>
 
           {/* ================= PRODUCTS ================= */}
+
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             {/* Table Header */}
+
             <div className="flex flex-col gap-1 border-b border-slate-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
               <h2 className="text-base font-bold text-slate-800">
                 My Products
@@ -410,12 +680,14 @@ function SellerDashboard() {
             </div>
 
             {/* Loading */}
+
             {loading ? (
               <div className="flex min-h-[280px] items-center justify-center">
                 <div className="h-9 w-9 animate-spin rounded-full border-2 border-slate-200 border-t-indigo-600" />
               </div>
             ) : visibleProducts.length === 0 ? (
               /* Empty */
+
               <div className="flex min-h-[300px] flex-col items-center justify-center px-6 py-16 text-center">
                 <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-100">
                   <Package size={28} className="text-slate-400" />
@@ -435,6 +707,7 @@ function SellerDashboard() {
               </div>
             ) : (
               /* Table */
+
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[760px] text-left text-sm">
                   <thead>
@@ -460,6 +733,7 @@ function SellerDashboard() {
                         className="transition duration-200 hover:bg-indigo-50/30"
                       >
                         {/* PRODUCT */}
+
                         <td className="px-5 py-4 sm:px-6">
                           <div className="flex items-center gap-3">
                             <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
@@ -490,21 +764,25 @@ function SellerDashboard() {
                         </td>
 
                         {/* CATEGORY */}
+
                         <td className="px-4 py-4 text-slate-500">
                           {product.category || "—"}
                         </td>
 
                         {/* PRICE */}
+
                         <td className="px-4 py-4 font-bold text-slate-800">
                           ₹{Number(product.price).toLocaleString("en-IN")}
                         </td>
 
                         {/* STOCK */}
+
                         <td className="px-4 py-4 font-semibold text-slate-700">
                           {product.stock}
                         </td>
 
                         {/* STATUS */}
+
                         <td className="px-4 py-4">
                           <span
                             className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
@@ -524,6 +802,7 @@ function SellerDashboard() {
                         </td>
 
                         {/* ACTIONS */}
+
                         <td className="px-4 py-4">
                           <div className="flex justify-end gap-2">
                             <button
@@ -559,13 +838,16 @@ function SellerDashboard() {
       </main>
 
       {/* ===================================================== */}
+
       {/* ADD PRODUCT MODAL */}
+
       {/* ===================================================== */}
 
       {addOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-3 py-4 backdrop-blur-sm sm:px-4">
           <div className="flex max-h-[94vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
             {/* Header */}
+
             <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-5 py-4 sm:px-6">
               <div>
                 <p className="text-[10px] font-bold tracking-widest text-indigo-600 uppercase">
@@ -586,6 +868,7 @@ function SellerDashboard() {
             </div>
 
             {/* Form */}
+
             <form
               onSubmit={handleAddProduct}
               className="overflow-y-auto p-5 sm:p-6"
@@ -667,6 +950,7 @@ function SellerDashboard() {
               </div>
 
               {/* Buttons */}
+
               <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <button
                   type="submit"
@@ -690,13 +974,16 @@ function SellerDashboard() {
       )}
 
       {/* ===================================================== */}
+
       {/* EDIT PRODUCT MODAL */}
+
       {/* ===================================================== */}
 
       {editProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-3 py-4 backdrop-blur-sm sm:px-4">
           <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
             {/* Header */}
+
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 sm:px-6">
               <div>
                 <p className="text-[10px] font-bold tracking-widest text-indigo-600 uppercase">

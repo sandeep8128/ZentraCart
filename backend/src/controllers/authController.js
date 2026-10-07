@@ -4,173 +4,220 @@ const jwt = require("jsonwebtoken");
 const transporter = require("../config/nodemailer");
 const crypto = require("crypto");
 
-
+// ==========================
 // REGISTER USER
+// ==========================
 
 exports.register = async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
 
-    try {
+    const existingUser = await User.findOne({ email });
 
-        const {
-            name,
-            email,
-            password
-        } = req.body;
-
-
-        const existingUser = await User.findOne({ email });
-
-
-        if(existingUser){
-
-            return res.status(400).json({
-                message:"User already exists"
-            });
-
-        }
-
-
-        const hashedPassword = await bcrypt.hash(password,10);
-
-
-        const user = await User.create({
-
-            name,
-            email,
-            password:hashedPassword
-
-        });
-
-
-        res.status(201).json({
-
-            message:"User Registered Successfully",
-
-            user:{
-                name:user.name,
-                email:user.email,
-                role:user.role
-            }
-
-        });
-
-
-    }
-    catch(error){
-
-        res.status(500).json({
-
-            message:error.message
-
-        });
-
+    if (existingUser) {
+      return res.status(400).json({
+        message: "User already exists",
+      });
     }
 
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const user = await User.create({
+      name,
+      email,
+      password: hashedPassword,
+    });
+
+    res.status(201).json({
+      message: "User Registered Successfully",
+      user: {
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
 };
 
-
-
-
+// ==========================
 // LOGIN USER
+// ==========================
 
+exports.login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
 
-exports.login = async(req,res)=>{
+    const user = await User.findOne({ email });
 
-
-    try{
-
-
-        const {
-            email,
-            password
-        } = req.body;
-
-
-
-        const user = await User.findOne({email});
-
-
-
-        if(!user){
-
-            return res.status(404).json({
-
-                message:"User not found"
-
-            });
-
-        }
-
-
-
-        const isMatch = await bcrypt.compare(
-            password,
-            user.password
-        );
-
-
-
-        if(!isMatch){
-
-            return res.status(400).json({
-
-                message:"Invalid Password"
-
-            });
-
-        }
-
-
-
-        const token = jwt.sign(
-
-            {
-                id:user._id,
-                role:user.role
-            },
-
-            process.env.JWT_SECRET,
-
-            {
-                expiresIn:"1d"
-            }
-
-        );
-
-
-
-        res.json({
-
-            message:"Login Successful",
-
-            token,
-
-            user:{
-
-                name:user.name,
-                email:user.email,
-                role:user.role
-
-            }
-
-        });
-
-
-
-    }
-    catch(error){
-
-
-        res.status(500).json({
-
-            message:error.message
-
-        });
-
-
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
     }
 
+    const isMatch = await bcrypt.compare(password, user.password);
 
+    if (!isMatch) {
+      return res.status(400).json({
+        message: "Invalid Password",
+      });
+    }
+
+    const token = jwt.sign(
+      {
+        id: user._id,
+        role: user.role,
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "1d",
+      },
+    );
+
+    res.json({
+      message: "Login Successful",
+      token,
+      user: {
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
+// ==========================
+// UPDATE USER LOCATION
+// ==========================
+
+exports.updateLocation = async (req, res) => {
+  try {
+    const { latitude, longitude, address } = req.body;
+
+    if (
+      latitude === undefined ||
+      latitude === null ||
+      longitude === undefined ||
+      longitude === null
+    ) {
+      return res.status(400).json({
+        message: "Latitude and longitude are required",
+      });
+    }
+
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return res.status(400).json({
+        message: "Invalid latitude or longitude",
+      });
+    }
+
+    if (lat < -90 || lat > 90) {
+      return res.status(400).json({
+        message: "Invalid latitude",
+      });
+    }
+
+    if (lng < -180 || lng > 180) {
+      return res.status(400).json({
+        message: "Invalid longitude",
+      });
+    }
+
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    user.location = {
+      latitude: lat,
+      longitude: lng,
+      address: address || "",
+      updatedAt: new Date(),
+    };
+
+    await user.save();
+
+    res.json({
+      message: "Location Updated Successfully",
+      location: user.location,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
+// ==========================
+// GET USER LOCATION
+// ==========================
+
+exports.getLocation = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select("location");
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    res.json({
+      location: user.location || null,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
+// ==========================
+// CLEAR USER LOCATION
+// ==========================
+
+exports.clearLocation = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    user.location = {
+      latitude: null,
+      longitude: null,
+      address: "",
+      updatedAt: null,
+    };
+
+    await user.save();
+
+    res.json({
+      message: "Location Removed Successfully",
+      location: user.location,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
 };
 
 // ==========================
@@ -183,10 +230,13 @@ exports.changePassword = async (req, res) => {
 
     const user = await User.findById(req.user.id);
 
-    const isMatch = await bcrypt.compare(
-      currentPassword,
-      user.password
-    );
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
 
     if (!isMatch) {
       return res.status(400).json({
@@ -194,10 +244,7 @@ exports.changePassword = async (req, res) => {
       });
     }
 
-    const hashedPassword = await bcrypt.hash(
-      newPassword,
-      10
-    );
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
 
     user.password = hashedPassword;
 
@@ -213,6 +260,10 @@ exports.changePassword = async (req, res) => {
   }
 };
 
+// ==========================
+// UPDATE PROFILE
+// ==========================
+
 exports.updateProfile = async (req, res) => {
   try {
     const { name } = req.body;
@@ -220,8 +271,14 @@ exports.updateProfile = async (req, res) => {
     const user = await User.findByIdAndUpdate(
       req.user.id,
       { name },
-      { new: true }
+      { new: true },
     );
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
 
     res.json({
       message: "Profile Updated Successfully",
@@ -237,6 +294,10 @@ exports.updateProfile = async (req, res) => {
     });
   }
 };
+
+// ==========================
+// BECOME SELLER
+// ==========================
 
 exports.becomeSeller = async (req, res) => {
   try {
@@ -269,7 +330,9 @@ exports.becomeSeller = async (req, res) => {
   }
 };
 
-// forget password 
+// ==========================
+// FORGOT PASSWORD
+// ==========================
 
 exports.forgotPassword = async (req, res) => {
   try {
@@ -283,19 +346,15 @@ exports.forgotPassword = async (req, res) => {
       });
     }
 
-    const resetToken = crypto
-      .randomBytes(32)
-      .toString("hex");
+    const resetToken = crypto.randomBytes(32).toString("hex");
 
     user.resetPasswordToken = resetToken;
 
-    user.resetPasswordExpire =
-      Date.now() + 15 * 60 * 1000;
+    user.resetPasswordExpire = Date.now() + 15 * 60 * 1000;
 
     await user.save();
 
-    const resetUrl =
-      `http://localhost:5173/reset-password/${resetToken}`;
+    const resetUrl = `http://localhost:5173/reset-password/${resetToken}`;
 
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
@@ -303,6 +362,7 @@ exports.forgotPassword = async (req, res) => {
       subject: "Password Reset Request",
       html: `
         <h2>Password Reset</h2>
+
         <p>Click below link to reset password:</p>
 
         <a href="${resetUrl}">
@@ -323,7 +383,9 @@ exports.forgotPassword = async (req, res) => {
   }
 };
 
-//Reset password
+// ==========================
+// RESET PASSWORD
+// ==========================
 
 exports.resetPassword = async (req, res) => {
   try {
@@ -345,8 +407,7 @@ exports.resetPassword = async (req, res) => {
       });
     }
 
-    const hashedPassword =
-      await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     user.password = hashedPassword;
 
