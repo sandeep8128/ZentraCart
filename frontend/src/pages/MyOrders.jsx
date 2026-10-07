@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
+
 import { useSelector } from "react-redux";
+
 import API from "../services/api";
+
 import Navbar from "../components/Navbar";
+
 import toast from "react-hot-toast";
 
 const STATUS_STEPS = ["pending", "confirmed", "shipped", "delivered"];
@@ -45,13 +49,9 @@ const statusConfig = {
 
 const trackingMessage = {
   pending: "Order received and waiting for seller confirmation.",
-
   confirmed: "Seller confirmed your order and is preparing shipment.",
-
   shipped: "Package is on the way to your delivery address.",
-
   delivered: "Package delivered successfully. Enjoy your purchase!",
-
   cancelled: "This order has been cancelled.",
 };
 
@@ -64,9 +64,9 @@ function StatusBadge({ status }) {
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold capitalize sm:px-3 sm:text-xs ${cfg.bg} ${cfg.text} ${cfg.border} `}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold capitalize sm:px-3 sm:text-xs ${cfg.bg} ${cfg.text} ${cfg.border}`}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot} `} />
+      <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
 
       {status}
     </span>
@@ -97,7 +97,7 @@ function TrackingBar({ status }) {
                     done
                       ? "border-slate-900 bg-slate-900 text-white"
                       : "border-slate-200 bg-white text-slate-300"
-                  } ${active ? "ring-4 ring-indigo-100" : ""} `}
+                  } ${active ? "ring-4 ring-indigo-100" : ""}`}
                 >
                   {done ? (
                     <svg
@@ -121,7 +121,7 @@ function TrackingBar({ status }) {
                 <span
                   className={`mt-1.5 text-[9px] font-medium capitalize sm:text-[10px] ${
                     done ? "text-slate-800" : "text-slate-400"
-                  } `}
+                  }`}
                 >
                   {step}
                 </span>
@@ -133,7 +133,7 @@ function TrackingBar({ status }) {
                 <div
                   className={`mx-1 mt-3.5 h-0.5 flex-1 rounded-full transition-all duration-300 sm:mt-4 ${
                     i < currentIndex ? "bg-slate-900" : "bg-slate-200"
-                  } `}
+                  }`}
                 />
               )}
             </div>
@@ -148,7 +148,7 @@ function TrackingBar({ status }) {
 // ORDER CARD
 // =====================================================
 
-function OrderCard({ order, onCancel, onPay, onInvoice }) {
+function OrderCard({ order, onCancel, onDelete, onPay, onInvoice }) {
   const [expanded, setExpanded] = useState(true);
 
   const deliveryDate = new Date(
@@ -228,7 +228,7 @@ function OrderCard({ order, onCancel, onPay, onInvoice }) {
               <svg
                 className={`h-4 w-4 transition-transform duration-200 ${
                   expanded ? "rotate-180" : ""
-                } `}
+                }`}
                 viewBox="0 0 16 16"
                 fill="none"
               >
@@ -409,14 +409,14 @@ function OrderCard({ order, onCancel, onPay, onInvoice }) {
                   order.orderStatus === "cancelled"
                     ? "border-red-100 bg-red-50"
                     : "border-indigo-100 bg-indigo-50/50"
-                } `}
+                }`}
               >
                 <p
                   className={`text-xs leading-relaxed ${
                     order.orderStatus === "cancelled"
                       ? "text-red-600"
                       : "text-indigo-700"
-                  } `}
+                  }`}
                 >
                   {trackingMessage[order.orderStatus] ||
                     trackingMessage.pending}
@@ -507,6 +507,17 @@ function OrderCard({ order, onCancel, onPay, onInvoice }) {
                     Cancel Order
                   </button>
                 )}
+
+                {/* DELETE CANCELLED ORDER */}
+
+                {order.orderStatus === "cancelled" && (
+                  <button
+                    onClick={() => onDelete(order._id)}
+                    className="w-full rounded-xl border border-red-200 bg-red-600 py-3 text-sm font-semibold text-white transition-all duration-300 hover:bg-red-700 hover:shadow-sm active:scale-[0.98]"
+                  >
+                    Delete Order
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -524,6 +535,7 @@ function MyOrders() {
   const { token } = useSelector((state) => state.auth);
 
   const [orders, setOrders] = useState([]);
+
   const [loading, setLoading] = useState(true);
 
   // =====================================================
@@ -608,6 +620,34 @@ function MyOrders() {
   };
 
   // =====================================================
+  // DELETE CANCELLED ORDER
+  // =====================================================
+
+  const handleDeleteOrder = async (orderId) => {
+    const confirmed = window.confirm(
+      "Are you sure you want to permanently delete this cancelled order?",
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const res = await API.delete(`/orders/delete/${orderId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      toast.success(res.data.message || "Order deleted successfully");
+
+      setOrders((prevOrders) =>
+        prevOrders.filter((order) => order._id !== orderId),
+      );
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to delete order");
+    }
+  };
+
+  // =====================================================
   // RAZORPAY
   // =====================================================
 
@@ -645,34 +685,28 @@ function MyOrders() {
         },
 
         handler: async (response) => {
-          try {
-            const verifyRes = await API.post(
-              "/payment/verify",
-              {
-                orderId: order._id,
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
+          const verifyRes = await API.post(
+            "/payment/verify",
+            {
+              orderId: order._id,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            },
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
               },
-              {
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                },
-              },
-            );
+            },
+          );
 
-            toast.success(verifyRes.data.message);
+          toast.success(verifyRes.data.message);
 
-            fetchOrders();
-          } catch (error) {
-            toast.error(
-              error.response?.data?.message || "Payment verification failed",
-            );
-          }
+          fetchOrders();
         },
 
         theme: {
-          color: "#0f172a",
+          color: "#285570",
         },
       };
 
@@ -682,73 +716,55 @@ function MyOrders() {
     }
   };
 
-  // =====================================================
-  // INITIAL LOAD
-  // =====================================================
-
   useEffect(() => {
     fetchOrders();
   }, []);
-
-  // =====================================================
-  // UI
-  // =====================================================
 
   return (
     <>
       <Navbar />
 
-      <div className="min-h-screen bg-[#FAF7F6]">
-        <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8 lg:py-10">
-          {/* =================================================
-              PAGE HEADER
-          ================================================= */}
+      <div className="min-h-screen bg-gray-50">
+        <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+          {/* Page header */}
 
-          <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
+          <div className="mb-8 flex items-end justify-between">
             <div>
-              <p className="text-[10px] font-bold tracking-[0.2em] text-slate-400 uppercase">
+              <p className="text-[11px] font-semibold tracking-widest text-gray-400 uppercase">
                 ZentraCart
               </p>
 
-              <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 transition-colors duration-300 hover:text-indigo-600 sm:text-3xl">
+              <h1 className="mt-1 text-3xl font-bold tracking-tight text-gray-900">
                 My Orders
               </h1>
 
-              <p className="mt-1 text-xs text-slate-500 sm:text-sm">
+              <p className="mt-1 text-sm text-gray-500">
                 Track and manage your orders
               </p>
             </div>
 
             {orders.length > 0 && (
-              <span className="w-fit rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-500 shadow-sm">
+              <span className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-500">
                 {orders.length} {orders.length === 1 ? "order" : "orders"}
               </span>
             )}
           </div>
 
-          {/* =================================================
-              LOADING
-          ================================================= */}
+          {/* Loading */}
 
           {loading && (
-            <div className="flex min-h-[300px] items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <div className="flex flex-col items-center gap-3">
-                <div className="h-9 w-9 animate-spin rounded-full border-2 border-slate-900 border-t-transparent" />
-
-                <p className="text-xs text-slate-400">Loading your orders...</p>
-              </div>
+            <div className="flex items-center justify-center py-24">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#285570] border-t-transparent" />
             </div>
           )}
 
-          {/* =================================================
-              EMPTY STATE
-          ================================================= */}
+          {/* Empty state */}
 
           {!loading && orders.length === 0 && (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-5 py-20 text-center shadow-sm">
-              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 transition-all duration-300 hover:bg-indigo-50">
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white px-6 py-20 text-center shadow-sm">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-400">
                 <svg
-                  className="h-8 w-8 text-slate-400 transition-colors hover:text-indigo-600"
+                  className="h-7 w-7"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -762,7 +778,7 @@ function MyOrders() {
                 </svg>
               </div>
 
-              <h3 className="text-base font-semibold text-slate-700">
+              <h3 className="mt-4 text-base font-semibold text-slate-700">
                 No orders yet
               </h3>
 
@@ -783,6 +799,7 @@ function MyOrders() {
                   key={order._id}
                   order={order}
                   onCancel={handleCancelOrder}
+                  onDelete={handleDeleteOrder}
                   onPay={handleRazorpay}
                   onInvoice={handleDownloadInvoice}
                 />

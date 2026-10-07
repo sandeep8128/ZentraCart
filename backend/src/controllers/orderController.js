@@ -1,13 +1,21 @@
 const { getIO } = require("../socket/socket");
 
 const Notification = require("../models/Notification");
+
 const Order = require("../models/Order");
+
 const Cart = require("../models/Cart");
+
 const Coupon = require("../models/Coupon");
+
 const User = require("../models/User");
+
 const Product = require("../models/Product");
+
 const sendEmail = require("../utils/sendEmail");
+
 const PDFDocument = require("pdfkit");
+
 const Address = require("../models/Address");
 
 // =====================================================
@@ -26,6 +34,7 @@ const calculateDistanceKm = (lat1, lon1, lat2, lon2) => {
   const R = 6371;
 
   const dLat = toRad(lat2 - lat1);
+
   const dLon = toRad(lon2 - lon1);
 
   const a =
@@ -48,6 +57,7 @@ const hasValidCoordinates = (location) => {
   if (!location) return false;
 
   const latitude = Number(location.latitude);
+
   const longitude = Number(location.longitude);
 
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
@@ -155,24 +165,6 @@ exports.createOrder = async (req, res) => {
 
     // =========================================================
     // OPTIONAL 30 KM DELIVERY VALIDATION
-    // =========================================================
-    //
-    // Customer location missing
-    //      -> NORMAL ORDER ALLOWED
-    //
-    // Customer location available
-    // Seller location missing
-    //      -> NORMAL ORDER ALLOWED
-    //
-    // Customer + Seller location available
-    //      -> Calculate distance
-    //
-    // Distance <= 30 KM
-    //      -> ORDER ALLOWED
-    //
-    // Distance > 30 KM
-    //      -> ORDER BLOCKED
-    //
     // =========================================================
 
     const customerHasLocation = hasValidCoordinates(selectedAddress.location);
@@ -329,7 +321,9 @@ exports.createOrder = async (req, res) => {
     // =================================================
 
     let discountAmount = 0;
+
     let finalAmount = totalAmount;
+
     let couponCode = "";
 
     if (coupon) {
@@ -396,20 +390,7 @@ exports.createOrder = async (req, res) => {
     });
 
     // =================================================
-    // IMPORTANT FIX
     // SEND SUCCESS RESPONSE IMMEDIATELY
-    // =================================================
-    //
-    // Order created
-    // Stock reduced
-    // Cart cleared
-    //
-    // Now frontend gets response immediately.
-    //
-    // Email / Notification / Socket will run
-    // in background and cannot keep checkout
-    // stuck on "Placing Order..."
-    //
     // =================================================
 
     res.status(201).json({
@@ -437,9 +418,7 @@ exports.createOrder = async (req, res) => {
           try {
             await sendEmail(
               user.email,
-
               "Order Confirmed - ZentraCart",
-
               `Hello ${user.name},
 
 Your order has been placed successfully.
@@ -464,9 +443,7 @@ Thank you for shopping with ZentraCart.`,
         try {
           await Notification.create({
             user: req.user.id,
-
             title: "Order Placed",
-
             message: `Your order #${order._id} has been placed successfully`,
           });
         } catch (notificationError) {
@@ -483,9 +460,7 @@ Thank you for shopping with ZentraCart.`,
           if (io) {
             io.emit("newOrder", {
               message: "New Order Placed",
-
               orderId: order._id,
-
               totalAmount: order.totalAmount,
             });
           }
@@ -499,8 +474,6 @@ Thank you for shopping with ZentraCart.`,
   } catch (error) {
     console.log("ORDER ERROR =>", error);
 
-    // Avoid sending a second response if
-    // success response was already sent.
     if (!res.headersSent) {
       return res.status(500).json({
         message: error.message,
@@ -553,7 +526,6 @@ exports.getSellerOrders = async (req, res) => {
       if (sellerProducts.length > 0) {
         sellerOrders.push({
           ...order.toObject(),
-
           products: sellerProducts,
         });
       }
@@ -561,7 +533,6 @@ exports.getSellerOrders = async (req, res) => {
 
     res.json({
       count: sellerOrders.length,
-
       orders: sellerOrders,
     });
   } catch (error) {
@@ -593,7 +564,6 @@ exports.updateOrderStatus = async (req, res) => {
 
     res.json({
       message: "Order Status Updated",
-
       order,
     });
   } catch (error) {
@@ -662,8 +632,47 @@ exports.cancelOrder = async (req, res) => {
 
     res.json({
       message: "Order Cancelled Successfully",
-
       order,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
+// =====================================================
+// DELETE CANCELLED ORDER
+// =====================================================
+
+exports.deleteOrder = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({
+        message: "Order not found",
+      });
+    }
+
+    // Only order owner can delete
+    if (order.user.toString() !== req.user.id) {
+      return res.status(403).json({
+        message: "Unauthorized",
+      });
+    }
+
+    // Only cancelled orders can be permanently deleted
+    if (order.orderStatus !== "cancelled") {
+      return res.status(400).json({
+        message: "Only cancelled orders can be deleted",
+      });
+    }
+
+    await Order.findByIdAndDelete(order._id);
+
+    res.json({
+      message: "Order Deleted Successfully",
     });
   } catch (error) {
     res.status(500).json({

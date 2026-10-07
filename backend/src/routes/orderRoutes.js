@@ -9,6 +9,7 @@ const {
   getMyOrders,
   updateOrderStatus,
   cancelOrder,
+  deleteOrder,
   downloadInvoice,
   getSellerOrders,
 } = require("../controllers/orderController");
@@ -24,6 +25,8 @@ router.get("/my-orders", authMiddleware, getMyOrders);
 router.put("/status/:id", authMiddleware, updateOrderStatus);
 
 router.put("/cancel/:id", authMiddleware, cancelOrder);
+
+router.delete("/delete/:id", authMiddleware, deleteOrder);
 
 // Download Invoice
 
