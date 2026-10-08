@@ -1,21 +1,72 @@
 import { useNavigate } from "react-router-dom";
-import { Star, ArrowUpRight, MapPin } from "lucide-react";
+import { Star, ArrowUpRight, MapPin, Heart } from "lucide-react";
 
-function ProductCard({ product }) {
+function ProductCard({
+  product,
+  showNearby = false,
+  radiusKm = 30,
+  isWishlisted = false,
+  onToggleWishlist,
+}) {
   const navigate = useNavigate();
 
-  const hasDiscount =
-    product.mrp && Number(product.mrp) > Number(product.price);
-
-  const discountPct = hasDiscount
-    ? Math.round(
-        ((Number(product.mrp) - Number(product.price)) / Number(product.mrp)) *
-          100,
-      )
-    : null;
+  if (!product) {
+    return null;
+  }
 
   // =====================================================
-  // DELIVERY / DISTANCE
+  // IMAGE
+  // =====================================================
+
+  const image =
+    product.images?.[0]?.url ||
+    (typeof product.images?.[0] === "string" ? product.images[0] : "") ||
+    product.image ||
+    product.imageUrl ||
+    product.thumbnail ||
+    "";
+
+  // =====================================================
+  // BASIC INFO
+  // =====================================================
+
+  const title = product.title || product.name || "Product";
+
+  const brand =
+    product.brand || product.seller?.name || product.sellerName || "";
+
+  // =====================================================
+  // PRICE
+  // =====================================================
+
+  const price = Number(
+    product.price ?? product.sellingPrice ?? product.salePrice ?? 0,
+  );
+
+  const mrp = Number(
+    product.mrp ?? product.originalPrice ?? product.oldPrice ?? 0,
+  );
+
+  const hasDiscount = mrp > price && price > 0;
+
+  const discountPct = hasDiscount
+    ? Math.round(((mrp - price) / mrp) * 100)
+    : Number(product.discount || 0);
+
+  // =====================================================
+  // RATING
+  // =====================================================
+
+  const rating = Number(product.rating ?? product.averageRating ?? 0);
+
+  const reviewCount = Number(
+    product.numReviews ??
+      product.reviewCount ??
+      (Array.isArray(product.reviews) ? product.reviews.length : 0),
+  );
+
+  // =====================================================
+  // DISTANCE / DELIVERY
   // =====================================================
 
   const hasDistance =
@@ -25,130 +76,170 @@ function ProductCard({ product }) {
 
   const distance = hasDistance ? Number(product.distance) : null;
 
-  const isWithinDeliveryRange = hasDistance && distance <= 30;
+  const isWithinDeliveryRange = hasDistance && distance <= Number(radiusKm);
+
+  // =====================================================
+  // WISHLIST
+  // =====================================================
+
+  const handleWishlist = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (onToggleWishlist) {
+      onToggleWishlist(product);
+    }
+  };
+
+  // =====================================================
+  // PRODUCT DETAILS
+  // =====================================================
+
+  const handleOpenProduct = () => {
+    navigate(`/products/${product._id}`);
+  };
 
   return (
     <div
-      onClick={() => navigate(`/products/${product._id}`)}
-      className="group flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white transition-all duration-300 hover:-translate-y-1 hover:border-slate-300 hover:shadow-[0_16px_40px_-12px_rgba(15,23,42,0.18)]"
+      onClick={handleOpenProduct}
+      className="group flex h-full min-w-0 cursor-pointer flex-col overflow-hidden bg-white"
     >
-      {/* =====================================================
+      {/* =================================================
           PRODUCT IMAGE
-      ===================================================== */}
+      ================================================= */}
 
-      {product.images?.[0]?.url && (
-        <div className="relative flex h-52 w-full shrink-0 items-center justify-center overflow-hidden bg-slate-50 sm:h-56 md:h-60">
+      <div className="relative aspect-[3/4] w-full overflow-hidden rounded-lg bg-slate-100 sm:rounded-xl">
+        {image ? (
           <img
-            src={product.images[0].url}
-            alt={product.title}
-            className="h-full max-h-[88%] w-auto max-w-[90%] object-contain transition-transform duration-500 ease-out group-hover:scale-[1.06]"
+            src={image}
+            alt={title}
+            loading="lazy"
+            className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.03]"
+            onError={(event) => {
+              event.currentTarget.style.display = "none";
+
+              const fallback = event.currentTarget.nextElementSibling;
+
+              if (fallback) {
+                fallback.classList.remove("hidden");
+              }
+            }}
           />
+        ) : null}
 
-          {/* =================================================
-              TOP LEFT BADGES
-          ================================================= */}
+        {/* IMAGE FALLBACK */}
 
-          <div className="absolute top-2 left-2 flex max-w-[75%] flex-col items-start gap-1.5 sm:top-3 sm:left-3">
-            {product.category && (
-              <span className="max-w-full truncate rounded-full border border-slate-200 bg-white/95 px-2 py-1 text-[9px] font-semibold tracking-wide text-slate-600 uppercase shadow-sm sm:px-2.5 sm:text-[10.5px]">
-                {product.category}
-              </span>
-            )}
-
-            {discountPct && (
-              <span className="rounded-full bg-rose-500 px-2 py-1 text-[9px] font-bold text-white shadow-sm sm:px-2.5 sm:text-[10.5px]">
-                {discountPct}% OFF
-              </span>
-            )}
-
-            {/* =================================================
-                DISTANCE BADGE
-            ================================================= */}
-
-            {hasDistance && (
-              <span
-                className={`flex items-center gap-1 rounded-full px-2 py-1 text-[9px] font-bold shadow-sm sm:px-2.5 sm:text-[10.5px] ${
-                  isWithinDeliveryRange
-                    ? "bg-emerald-500 text-white"
-                    : "bg-amber-500 text-white"
-                }`}
-              >
-                <MapPin size={10} className="shrink-0" />
-                {distance.toFixed(1)} km away
-              </span>
-            )}
-          </div>
-
-          {/* =================================================
-              QUICK VIEW ICON
-          ================================================= */}
-
-          <div className="absolute right-2 bottom-2 flex h-8 w-8 items-center justify-center rounded-full bg-white text-slate-700 opacity-100 shadow-md transition-all duration-300 sm:right-3 sm:bottom-3 sm:translate-y-2 sm:opacity-0 sm:group-hover:translate-y-0 sm:group-hover:opacity-100">
-            <ArrowUpRight size={15} />
-          </div>
+        <div
+          className={`${
+            image ? "hidden" : ""
+          } flex h-full w-full items-center justify-center text-3xl text-slate-300`}
+        >
+          🛍️
         </div>
-      )}
 
-      {/* =====================================================
+        {/* =================================================
+            CATEGORY
+        ================================================= */}
+
+        {product.category && (
+          <span className="absolute top-2 left-2 max-w-[65%] truncate rounded-full bg-white/95 px-2 py-1 text-[8px] font-semibold tracking-wide text-slate-600 uppercase shadow-sm sm:text-[10px]">
+            {product.category}
+          </span>
+        )}
+
+        {/* =================================================
+            DISCOUNT
+        ================================================= */}
+
+        {discountPct > 0 && (
+          <span className="absolute bottom-2 left-2 rounded bg-green-600 px-1.5 py-1 text-[9px] font-bold text-white shadow-sm sm:px-2 sm:text-[10px]">
+            {discountPct}% OFF
+          </span>
+        )}
+
+        {/* =================================================
+            WISHLIST
+        ================================================= */}
+
+        {onToggleWishlist && (
+          <button
+            type="button"
+            onClick={handleWishlist}
+            aria-label={
+              isWishlisted ? "Remove from wishlist" : "Add to wishlist"
+            }
+            className="absolute top-2 right-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white/95 shadow-sm transition active:scale-90 sm:h-9 sm:w-9"
+          >
+            <Heart
+              size={17}
+              strokeWidth={2}
+              className={
+                isWishlisted ? "fill-red-500 text-red-500" : "text-slate-700"
+              }
+            />
+          </button>
+        )}
+
+        {/* =================================================
+            QUICK VIEW
+        ================================================= */}
+
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            handleOpenProduct();
+          }}
+          aria-label="View product"
+          className="absolute right-2 bottom-2 hidden h-8 w-8 items-center justify-center rounded-full bg-white text-slate-700 shadow-md transition-all duration-300 sm:flex sm:translate-y-2 sm:opacity-0 sm:group-hover:translate-y-0 sm:group-hover:opacity-100"
+        >
+          <ArrowUpRight size={15} />
+        </button>
+      </div>
+
+      {/* =================================================
           PRODUCT CONTENT
-      ===================================================== */}
+      ================================================= */}
 
-      <div className="flex flex-1 flex-col border-t border-slate-100 p-4 sm:p-5">
+      <div className="flex min-w-0 flex-1 flex-col px-0.5 pt-2 pb-1">
+        {/* =================================================
+            BRAND
+        ================================================= */}
+
+        {brand && (
+          <p className="truncate text-[11px] leading-tight font-bold text-slate-900 sm:text-[13px]">
+            {brand}
+          </p>
+        )}
+
         {/* =================================================
             TITLE
         ================================================= */}
 
-        <h3 className="mb-1 line-clamp-1 text-sm font-semibold text-slate-800 sm:text-[15px]">
-          {product.title}
+        <h3
+          title={title}
+          className="mt-0.5 line-clamp-2 min-h-[26px] text-[11px] leading-tight font-medium text-slate-700 sm:min-h-[32px] sm:text-xs"
+        >
+          {title}
         </h3>
-
-        {/* =================================================
-            DESCRIPTION
-        ================================================= */}
-
-        <p className="mb-3 line-clamp-2 min-h-[2.5em] text-xs leading-relaxed text-slate-500 sm:text-[13px]">
-          {product.description}
-        </p>
-
-        {/* =================================================
-            DELIVERY STATUS
-        ================================================= */}
-
-        {hasDistance && (
-          <div className="mb-3">
-            {isWithinDeliveryRange ? (
-              <div className="flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[10px] font-semibold text-emerald-700 sm:text-xs">
-                <MapPin size={12} className="shrink-0" />
-                Available for 30 KM delivery
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[10px] font-semibold text-amber-700 sm:text-xs">
-                <MapPin size={12} className="shrink-0" />
-                Outside 30 KM delivery range
-              </div>
-            )}
-          </div>
-        )}
 
         {/* =================================================
             RATING
         ================================================= */}
 
-        {product.rating > 0 && (
-          <div className="mb-3 flex items-center gap-1.5">
-            <span className="flex items-center gap-0.5 rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700 sm:text-xs">
-              {product.rating}
+        {rating > 0 && (
+          <div className="mt-1.5 flex items-center gap-1">
+            <span className="flex items-center gap-0.5 rounded bg-green-50 px-1.5 py-0.5 text-[9px] font-semibold text-green-700 sm:text-[10px]">
+              {rating.toFixed(1)}
 
-              <Star
-                size={10}
-                fill="currentColor"
-                className="sm:h-[11px] sm:w-[11px]"
-              />
+              <Star size={9} fill="currentColor" strokeWidth={1.5} />
             </span>
 
-            {product.numReviews > 0 && (
-              <span className="text-[11px] text-slate-400 sm:text-xs">
-                ({product.numReviews})
+            {reviewCount > 0 && (
+              <span className="truncate text-[9px] text-slate-400 sm:text-[10px]">
+                {reviewCount >= 1000
+                  ? `${Math.round(reviewCount / 1000)}k`
+                  : reviewCount}
               </span>
             )}
           </div>
@@ -158,29 +249,75 @@ function ProductCard({ product }) {
             PRICE
         ================================================= */}
 
-        <div className="mb-4 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <span className="text-lg font-bold text-slate-900 sm:text-xl">
-            ₹{Number(product.price).toLocaleString("en-IN")}
-          </span>
+        <div className="mt-1 flex min-w-0 flex-wrap items-baseline gap-x-1.5">
+          {discountPct > 0 && (
+            <span className="text-[10px] font-semibold text-green-600 sm:text-xs">
+              ↓{discountPct}%
+            </span>
+          )}
 
           {hasDiscount && (
-            <span className="text-xs text-slate-400 line-through sm:text-sm">
-              ₹{Number(product.mrp).toLocaleString("en-IN")}
+            <span className="text-[10px] text-slate-400 line-through sm:text-xs">
+              ₹{mrp.toLocaleString("en-IN")}
             </span>
+          )}
+
+          <span className="text-[15px] font-bold text-slate-900 sm:text-[17px]">
+            ₹{price.toLocaleString("en-IN")}
+          </span>
+        </div>
+
+        {/* =================================================
+            DELIVERY / OFFER
+        ================================================= */}
+
+        <div className="mt-1.5 flex min-w-0 flex-wrap gap-1">
+          {/* FREE DELIVERY */}
+
+          {price >= 499 && (
+            <span className="max-w-full truncate rounded bg-indigo-50 px-1.5 py-0.5 text-[9px] font-semibold text-indigo-700 sm:text-[10px]">
+              Free Delivery
+            </span>
+          )}
+
+          {/* =================================================
+              LOCATION BADGE
+          ================================================= */}
+
+          {showNearby && (
+            <>
+              {hasDistance ? (
+                <span
+                  className={`max-w-full truncate rounded px-1.5 py-0.5 text-[9px] font-semibold sm:text-[10px] ${
+                    isWithinDeliveryRange
+                      ? "bg-green-50 text-green-700"
+                      : "bg-amber-50 text-amber-700"
+                  }`}
+                >
+                  <MapPin size={9} className="mr-0.5 inline" />
+                  {distance.toFixed(1)} km
+                </span>
+              ) : (
+                <span className="max-w-full truncate rounded bg-green-50 px-1.5 py-0.5 text-[9px] font-semibold text-green-700 sm:text-[10px]">
+                  <MapPin size={9} className="mr-0.5 inline" />
+                  Within {radiusKm} KM
+                </span>
+              )}
+            </>
           )}
         </div>
 
         {/* =================================================
-            VIEW DETAILS BUTTON
+            VIEW DETAILS
         ================================================= */}
 
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-
-            navigate(`/products/${product._id}`);
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            handleOpenProduct();
           }}
-          className="mt-auto w-full rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-semibold text-white transition-all duration-200 hover:bg-indigo-600 active:scale-[0.98] sm:text-sm"
+          className="mt-2 w-full rounded-lg bg-slate-900 px-2 py-2 text-[10px] font-semibold text-white transition-all duration-200 hover:bg-indigo-600 active:scale-[0.98] sm:mt-3 sm:rounded-xl sm:px-3 sm:py-2.5 sm:text-xs"
         >
           View Details
         </button>
