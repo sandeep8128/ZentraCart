@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import API from "../services/api";
 import Navbar from "../components/Navbar";
 import toast from "react-hot-toast";
@@ -17,18 +17,46 @@ import {
   CreditCard,
   Navigation,
   AlertTriangle,
+  ShoppingBag,
+  ChevronLeft,
 } from "lucide-react";
 
 function Checkout() {
   const { token } = useSelector((state) => state.auth);
+
   const navigate = useNavigate();
+  const location = useLocation();
 
   // =====================================================
-  // CART
+  // BUY NOW DATA
+  // =====================================================
+
+  /*
+    Normal Cart:
+      /checkout
+
+    Buy Now:
+      /checkout
+      state = {
+        buyNow: {
+          product: {...},
+          quantity: 1
+        }
+      }
+  */
+
+  const buyNowData = location.state?.buyNow || null;
+
+  const isBuyNow = Boolean(buyNowData?.product?._id || buyNowData?.product?.id);
+
+  // =====================================================
+  // CART ITEMS
   // =====================================================
 
   const [cartItems, setCartItems] = useState([]);
+
   const [loading, setLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
 
   // =====================================================
   // COUPON
@@ -50,7 +78,7 @@ function Checkout() {
   const [landmark, setLandmark] = useState("");
 
   // =====================================================
-  // OPTIONAL LOCATION
+  // LOCATION
   // =====================================================
 
   const [latitude, setLatitude] = useState(null);
@@ -73,7 +101,7 @@ function Checkout() {
   const [deliveryWarning, setDeliveryWarning] = useState("");
 
   // =====================================================
-  // AUTH HEADERS
+  // AUTH CONFIG
   // =====================================================
 
   const authConfig = {
@@ -95,6 +123,8 @@ function Checkout() {
       console.log("CART ERROR:", error.response?.data);
 
       toast.error(error.response?.data?.message || "Failed to load cart");
+
+      setCartItems([]);
     }
   };
 
@@ -110,7 +140,6 @@ function Checkout() {
 
       setAddresses(savedAddresses);
 
-      // Automatically select first address if nothing selected
       if (!selectedAddress && savedAddresses.length > 0) {
         setSelectedAddress(savedAddresses[0]._id);
       }
@@ -126,17 +155,65 @@ function Checkout() {
   useEffect(() => {
     if (!token) return;
 
-    fetchCart();
-    fetchAddresses();
-  }, [token]);
+    const loadCheckout = async () => {
+      try {
+        setPageLoading(true);
+
+        /*
+          IMPORTANT:
+
+          Buy Now mode:
+          ----------------
+          Do NOT fetch cart for products.
+
+          Normal mode:
+          ----------------
+          Fetch cart normally.
+        */
+
+        if (!isBuyNow) {
+          await fetchCart();
+        }
+
+        await fetchAddresses();
+      } finally {
+        setPageLoading(false);
+      }
+    };
+
+    loadCheckout();
+  }, [token, isBuyNow]);
+
+  // =====================================================
+  // CHECKOUT ITEMS
+  // =====================================================
+
+  const checkoutItems = useMemo(() => {
+    if (isBuyNow && buyNowData?.product) {
+      return [
+        {
+          _id: "buy-now-item",
+          product: buyNowData.product,
+          quantity: Math.max(1, Number(buyNowData.quantity || 1)),
+        },
+      ];
+    }
+
+    return cartItems;
+  }, [isBuyNow, buyNowData, cartItems]);
 
   // =====================================================
   // TOTAL
   // =====================================================
 
-  const total = cartItems.reduce(
+  const total = checkoutItems.reduce(
     (sum, item) =>
       sum + Number(item.product?.price || 0) * Number(item.quantity || 0),
+    0,
+  );
+
+  const totalQuantity = checkoutItems.reduce(
+    (sum, item) => sum + Number(item.quantity || 0),
     0,
   );
 
@@ -145,7 +222,7 @@ function Checkout() {
   const finalTotal = total + shipping;
 
   // =====================================================
-  // OPTIONAL CURRENT LOCATION
+  // CURRENT LOCATION
   // =====================================================
 
   const getCurrentLocation = () => {
@@ -163,6 +240,7 @@ function Checkout() {
 
         setLatitude(lat);
         setLongitude(lng);
+
         setLocationReady(true);
         setLocationLoading(false);
 
@@ -193,6 +271,7 @@ function Checkout() {
           );
         }
       },
+
       {
         enableHighAccuracy: true,
         timeout: 15000,
@@ -208,6 +287,7 @@ function Checkout() {
   const clearLocation = () => {
     setLatitude(null);
     setLongitude(null);
+
     setLocationReady(false);
     setDeliveryWarning("");
 
@@ -221,8 +301,22 @@ function Checkout() {
   const handlePlaceOrder = async () => {
     setDeliveryWarning("");
 
-    // Address is still required.
-    // Location is NOT required.
+    // ---------------------------------------------------
+    // CHECK ITEMS
+    // ---------------------------------------------------
+
+    if (!checkoutItems.length) {
+      toast.error(
+        isBuyNow ? "Buy Now product is unavailable." : "Your cart is empty.",
+      );
+
+      return;
+    }
+
+    // ---------------------------------------------------
+    // CHECK ADDRESS
+    // ---------------------------------------------------
+
     if (!selectedAddress) {
       toast.error("Please select delivery address");
       return;
@@ -235,37 +329,63 @@ function Checkout() {
       return;
     }
 
+    // ---------------------------------------------------
+    // BUY NOW PRODUCT
+    // ---------------------------------------------------
+
+    const buyNowProductId =
+      buyNowData?.product?._id || buyNowData?.product?.id || null;
+
+    const buyNowQuantity = Math.max(1, Number(buyNowData?.quantity || 1));
+
+    // ---------------------------------------------------
+    // REQUEST PAYLOAD
+    // ---------------------------------------------------
+
+    const orderPayload = {
+      coupon: coupon?.trim() || "",
+      addressId: selectedAddress,
+    };
+
+    /*
+      BUY NOW MODE
+
+      Backend should use this information instead
+      of reading the user's complete cart.
+    */
+
+    if (isBuyNow && buyNowProductId) {
+      orderPayload.buyNow = true;
+      orderPayload.productId = buyNowProductId;
+      orderPayload.quantity = buyNowQuantity;
+    }
+
     try {
       setLoading(true);
 
-      /*
-       * IMPORTANT:
-       *
-       * We do NOT force customer location here.
-       *
-       * Backend will decide:
-       *
-       * Customer location + Seller location available
-       *       -> 30 KM check
-       *
-       * Either location missing
-       *       -> Normal order allowed
-       */
+      console.log("CHECKOUT MODE:", isBuyNow ? "BUY NOW" : "CART");
 
-      const res = await API.post(
-        "/orders/create",
-        {
-          coupon,
-          addressId: selectedAddress,
-        },
-        authConfig,
-      );
+      console.log("ORDER PAYLOAD:", orderPayload);
+
+      const res = await API.post("/orders/create", orderPayload, authConfig);
 
       console.log("ORDER RESPONSE:", res.data);
 
-      toast.success("Order placed successfully!");
+      toast.success(
+        isBuyNow
+          ? "Buy Now order placed successfully!"
+          : "Order placed successfully!",
+      );
 
-      navigate("/orders");
+      /*
+        Remove Buy Now history state so if user
+        comes back to checkout, it doesn't accidentally
+        place the same Buy Now product again.
+      */
+
+      navigate("/orders", {
+        replace: true,
+      });
     } catch (error) {
       console.log("ORDER ERROR:", error.response?.data);
 
@@ -296,20 +416,11 @@ function Checkout() {
       // =================================================
 
       if (errorData?.code === "SELLER_LOCATION_MISSING") {
-        /*
-         * Optional location system:
-         *
-         * Backend should NOT normally return this
-         * as a blocking error anymore.
-         *
-         * Kept here for backward compatibility.
-         */
+        const message = errorData.message || "Seller location is unavailable.";
 
-        setDeliveryWarning(
-          errorData.message || "Seller location is unavailable.",
-        );
+        setDeliveryWarning(message);
 
-        toast.error(errorData.message || "Seller location is unavailable.");
+        toast.error(message);
 
         return;
       }
@@ -319,18 +430,25 @@ function Checkout() {
       // =================================================
 
       if (errorData?.code === "DELIVERY_LOCATION_REQUIRED") {
-        /*
-         * This should NOT happen with the new backend.
-         * Location is optional.
-         *
-         * Kept only for compatibility with old backend.
-         */
+        const message =
+          "Location is optional. Please update your backend OrderController to allow normal orders without location.";
 
-        setDeliveryWarning(
-          "Location is optional. Please update your backend OrderController to allow normal orders without location.",
-        );
+        setDeliveryWarning(message);
 
-        toast.error("Backend still requires location. Update OrderController.");
+        toast.error(message);
+
+        return;
+      }
+
+      // =================================================
+      // STOCK ERROR
+      // =================================================
+
+      if (
+        errorData?.code === "OUT_OF_STOCK" ||
+        errorData?.message?.toLowerCase()?.includes("stock")
+      ) {
+        toast.error(errorData.message || "Product is out of stock.");
 
         return;
       }
@@ -403,7 +521,7 @@ function Checkout() {
     }
 
     // =================================================
-    // OPTIONAL LOCATION PAYLOAD
+    // PAYLOAD
     // =================================================
 
     const payload = {
@@ -416,16 +534,9 @@ function Checkout() {
       landmark: cleanLandmark,
     };
 
-    /*
-     * IMPORTANT:
-     *
-     * Location is optional.
-     *
-     * If user clicked "Use My Current Location",
-     * send coordinates.
-     *
-     * Otherwise don't send them.
-     */
+    // =================================================
+    // OPTIONAL LOCATION
+    // =================================================
 
     if (
       latitude !== null &&
@@ -451,15 +562,16 @@ function Checkout() {
 
       toast.success(res.data.message || "Address Added Successfully");
 
-      // Refresh address list
       await fetchAddresses();
 
-      // Auto-select newly created address
+      // Auto select new address
+
       if (res.data.address?._id) {
         setSelectedAddress(res.data.address._id);
       }
 
       // Clear form
+
       setFullName("");
       setPhone("");
       setAddress("");
@@ -469,6 +581,7 @@ function Checkout() {
       setLandmark("");
 
       // Clear temporary location
+
       setLatitude(null);
       setLongitude(null);
       setLocationReady(false);
@@ -480,7 +593,7 @@ function Checkout() {
   };
 
   // =====================================================
-  // SELECT SAVED ADDRESS
+  // SELECT ADDRESS
   // =====================================================
 
   const handleSelectAddress = (addressId) => {
@@ -488,18 +601,6 @@ function Checkout() {
     setDeliveryWarning("");
 
     const selected = addresses.find((item) => item._id === addressId);
-
-    /*
-     * Location is optional.
-     *
-     * Therefore:
-     *
-     * Address without location
-     *       -> completely valid
-     *
-     * Address with location
-     *       -> 30 KM system can be used
-     */
 
     if (
       selected?.location?.latitude !== null &&
@@ -537,6 +638,35 @@ function Checkout() {
   `;
 
   // =====================================================
+  // LOADING SCREEN
+  // =====================================================
+
+  if (pageLoading) {
+    return (
+      <>
+        <Navbar />
+
+        <div className="min-h-screen bg-[#FAF7F6] px-3 py-6 sm:px-6">
+          <div className="mx-auto max-w-6xl">
+            <div className="h-8 w-40 animate-pulse rounded bg-slate-200" />
+
+            <div className="mt-2 h-4 w-60 animate-pulse rounded bg-slate-200" />
+
+            <div className="mt-6 grid gap-5 lg:grid-cols-3">
+              <div className="space-y-5 lg:col-span-2">
+                <div className="h-56 animate-pulse rounded-2xl bg-white" />
+                <div className="h-[600px] animate-pulse rounded-2xl bg-white" />
+              </div>
+
+              <div className="hidden h-96 animate-pulse rounded-2xl bg-white lg:block" />
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // =====================================================
   // UI
   // =====================================================
 
@@ -544,66 +674,104 @@ function Checkout() {
     <>
       <Navbar />
 
-      <div className="min-h-screen bg-[#FAF7F6]">
-        <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8 lg:py-10">
-          {/* PAGE HEADER */}
+      <div className="min-h-screen bg-[#FAF7F6] pb-8">
+        <div className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-8 lg:py-10">
+          {/* =================================================
+              HEADER
+          ================================================= */}
 
-          <div className="mb-6 sm:mb-8">
-            <p className="text-[10px] font-bold tracking-[0.2em] text-slate-500 uppercase">
+          <div className="mb-5 sm:mb-8">
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="mb-3 flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-900"
+            >
+              <ChevronLeft size={15} />
+              Back
+            </button>
+
+            <p className="text-[10px] font-bold tracking-[0.2em] text-slate-500 uppercase sm:text-[11px]">
               ZentraCart
             </p>
 
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-              Checkout
-            </h1>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+                Checkout
+              </h1>
+
+              {isBuyNow && (
+                <span className="rounded-full bg-orange-100 px-2.5 py-1 text-[10px] font-bold text-orange-700">
+                  BUY NOW
+                </span>
+              )}
+            </div>
 
             <p className="mt-1 text-xs text-slate-500 sm:text-sm">
-              Complete your order securely
+              {isBuyNow
+                ? "Complete your purchase for this product"
+                : "Complete your order securely"}
             </p>
           </div>
 
-          {/* MAIN GRID */}
+          {/* =================================================
+              MAIN GRID
+          ================================================= */}
 
           <div className="grid gap-5 lg:grid-cols-3 lg:gap-6">
-            {/* ================================================= */}
-            {/* LEFT */}
-            {/* ================================================= */}
+            {/* =================================================
+                LEFT
+            ================================================= */}
 
             <div className="space-y-5 lg:col-span-2">
-              {/* ================================================= */}
-              {/* CART ITEMS */}
-              {/* ================================================= */}
+              {/* =================================================
+                  ITEMS
+              ================================================= */}
 
               <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="border-b border-slate-100 px-4 py-4 sm:px-6">
                   <p className="text-[10px] font-bold tracking-[0.18em] text-slate-400 uppercase">
-                    Your Items
+                    {isBuyNow ? "Buy Now" : "Your Items"}
                   </p>
 
                   <p className="mt-1 text-sm font-semibold text-slate-800">
-                    {cartItems.length}{" "}
-                    {cartItems.length === 1 ? "item" : "items"} in cart
+                    {checkoutItems.length}{" "}
+                    {checkoutItems.length === 1 ? "item" : "items"} · Qty{" "}
+                    {totalQuantity}
                   </p>
                 </div>
 
                 <div className="divide-y divide-slate-100 px-4 sm:px-6">
-                  {cartItems.length === 0 ? (
-                    <div className="py-8 text-center text-sm text-slate-400">
-                      Your cart is empty.
+                  {checkoutItems.length === 0 ? (
+                    <div className="py-10 text-center">
+                      <ShoppingBag
+                        size={32}
+                        className="mx-auto text-slate-300"
+                      />
+
+                      <p className="mt-2 text-sm text-slate-400">
+                        {isBuyNow
+                          ? "Buy Now product is unavailable."
+                          : "Your cart is empty."}
+                      </p>
+
+                      <button
+                        type="button"
+                        onClick={() => navigate("/products")}
+                        className="mt-4 rounded-xl bg-slate-900 px-5 py-2.5 text-xs font-semibold text-white"
+                      >
+                        Continue Shopping
+                      </button>
                     </div>
                   ) : (
-                    cartItems.map((item) => (
-                      <div
-                        key={item._id}
-                        className="group flex gap-3 py-4 sm:gap-4"
-                      >
+                    checkoutItems.map((item) => (
+                      <div key={item._id} className="flex gap-3 py-4 sm:gap-4">
                         {/* IMAGE */}
 
-                        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-50 sm:h-20 sm:w-20">
+                        <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-50 sm:h-24 sm:w-24">
                           {item.product?.images?.[0]?.url ? (
                             <img
                               src={item.product.images[0].url}
-                              alt={item.product.title}
+                              alt={item.product.title || "Product"}
                               className="h-full w-full object-contain p-1.5"
                             />
                           ) : (
@@ -615,11 +783,25 @@ function Checkout() {
 
                         <div className="min-w-0 flex-1">
                           <h3 className="line-clamp-2 text-xs font-semibold text-slate-800 sm:text-sm">
-                            {item.product?.title}
+                            {item.product?.title || "Product"}
                           </h3>
 
-                          <p className="mt-1 text-[11px] text-slate-400 sm:text-xs">
+                          {item.product?.brand && (
+                            <p className="mt-1 text-[10px] text-slate-400">
+                              {item.product.brand}
+                            </p>
+                          )}
+
+                          <p className="mt-2 text-[11px] text-slate-400 sm:text-xs">
                             Qty: {item.quantity}
+                          </p>
+
+                          <p className="mt-1 text-xs font-bold text-slate-900 sm:text-sm">
+                            ₹
+                            {Number(item.product?.price || 0).toLocaleString(
+                              "en-IN",
+                            )}{" "}
+                            each
                           </p>
                         </div>
 
@@ -631,14 +813,6 @@ function Checkout() {
                             {Number(
                               (item.product?.price || 0) * item.quantity,
                             ).toLocaleString("en-IN")}
-                          </p>
-
-                          <p className="mt-0.5 text-[10px] text-slate-400 sm:text-xs">
-                            ₹
-                            {Number(item.product?.price || 0).toLocaleString(
-                              "en-IN",
-                            )}{" "}
-                            each
                           </p>
                         </div>
                       </div>
@@ -660,13 +834,11 @@ function Checkout() {
                 )}
               </div>
 
-              {/* ================================================= */}
-              {/* DELIVERY ADDRESS */}
-              {/* ================================================= */}
+              {/* =================================================
+                  DELIVERY ADDRESS
+              ================================================= */}
 
               <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                {/* HEADER */}
-
                 <div className="border-b border-slate-100 px-4 py-4 sm:px-6">
                   <div className="flex items-center gap-2">
                     <MapPin size={17} className="text-slate-800" />
@@ -682,8 +854,6 @@ function Checkout() {
                     </div>
                   </div>
                 </div>
-
-                {/* FORM */}
 
                 <div className="space-y-3 p-4 sm:p-6">
                   {/* NAME + PHONE */}
@@ -703,11 +873,9 @@ function Checkout() {
                       maxLength={10}
                       placeholder="Phone number"
                       value={phone}
-                      onChange={(e) => {
-                        const value = e.target.value.replace(/\D/g, "");
-
-                        setPhone(value);
-                      }}
+                      onChange={(e) =>
+                        setPhone(e.target.value.replace(/\D/g, ""))
+                      }
                       className={inputCls}
                     />
                   </div>
@@ -718,11 +886,11 @@ function Checkout() {
                     placeholder="Street address"
                     value={address}
                     onChange={(e) => setAddress(e.target.value)}
-                    rows="3"
+                    rows={3}
                     className={`${inputCls} resize-none`}
                   />
 
-                  {/* CITY / STATE / PINCODE */}
+                  {/* CITY STATE PIN */}
 
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <input
@@ -747,11 +915,9 @@ function Checkout() {
                       maxLength={6}
                       placeholder="Pincode"
                       value={pincode}
-                      onChange={(e) => {
-                        const value = e.target.value.replace(/\D/g, "");
-
-                        setPincode(value);
-                      }}
+                      onChange={(e) =>
+                        setPincode(e.target.value.replace(/\D/g, ""))
+                      }
                       className={inputCls}
                     />
                   </div>
@@ -766,9 +932,9 @@ function Checkout() {
                     className={inputCls}
                   />
 
-                  {/* ================================================= */}
-                  {/* OPTIONAL LOCATION */}
-                  {/* ================================================= */}
+                  {/* =================================================
+                      OPTIONAL LOCATION
+                  ================================================= */}
 
                   <div className="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4">
                     <div className="flex items-start gap-3">
@@ -790,8 +956,6 @@ function Checkout() {
                           nearby-seller delivery system.
                         </p>
 
-                        {/* LOCATION ACTIVE */}
-
                         {locationReady &&
                           latitude !== null &&
                           longitude !== null && (
@@ -806,8 +970,6 @@ function Checkout() {
                               </p>
                             </div>
                           )}
-
-                        {/* LOCATION BUTTON */}
 
                         <div className="mt-3 flex flex-wrap gap-2">
                           <button
@@ -829,8 +991,6 @@ function Checkout() {
                             )}
                           </button>
 
-                          {/* REMOVE LOCATION */}
-
                           {locationReady && (
                             <button
                               type="button"
@@ -844,8 +1004,6 @@ function Checkout() {
                       </div>
                     </div>
                   </div>
-
-                  {/* OPTIONAL LOCATION INFO */}
 
                   {!locationReady && (
                     <div className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
@@ -873,9 +1031,9 @@ function Checkout() {
                     </button>
                   </div>
 
-                  {/* ================================================= */}
-                  {/* SAVED ADDRESSES */}
-                  {/* ================================================= */}
+                  {/* =================================================
+                      SAVED ADDRESSES
+                  ================================================= */}
 
                   <div className="mt-6">
                     <h3 className="mb-3 text-sm font-semibold text-slate-800">
@@ -933,8 +1091,6 @@ function Checkout() {
                                     </p>
                                   )}
 
-                                  {/* LOCATION STATUS */}
-
                                   {hasLocation ? (
                                     <p className="mt-2 flex items-center gap-1 text-[11px] font-medium text-emerald-600">
                                       <CheckCircle2 size={13} />
@@ -979,9 +1135,9 @@ function Checkout() {
               </div>
             </div>
 
-            {/* ================================================= */}
-            {/* RIGHT - ORDER SUMMARY */}
-            {/* ================================================= */}
+            {/* =================================================
+                RIGHT — ORDER SUMMARY
+            ================================================= */}
 
             <div className="h-fit space-y-4 lg:sticky lg:top-20">
               <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -1003,23 +1159,20 @@ function Checkout() {
                   </div>
                 </div>
 
-                {/* SUMMARY BODY */}
+                {/* BODY */}
 
                 <div className="p-5 sm:p-6">
-                  {/* SUBTOTAL */}
-
                   <div className="space-y-3">
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-sm text-slate-500">
-                        Subtotal ({cartItems.length} items)
+                        Subtotal ({totalQuantity}{" "}
+                        {totalQuantity === 1 ? "item" : "items"})
                       </span>
 
                       <span className="text-sm font-medium text-slate-800">
                         ₹{Number(total).toLocaleString("en-IN")}
                       </span>
                     </div>
-
-                    {/* SHIPPING */}
 
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-slate-500">Shipping</span>
@@ -1067,12 +1220,21 @@ function Checkout() {
                           setCoupon(e.target.value);
                           setCouponApplied(false);
                         }}
-                        className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-slate-900 focus:bg-white"
+                        className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm uppercase outline-none focus:border-slate-900 focus:bg-white"
                       />
 
                       <button
                         type="button"
-                        onClick={() => setCouponApplied(true)}
+                        onClick={() => {
+                          if (!coupon.trim()) {
+                            toast.error("Please enter coupon code");
+                            return;
+                          }
+
+                          setCouponApplied(true);
+
+                          toast.success(`Coupon "${coupon.trim()}" added`);
+                        }}
                         className="rounded-xl border border-slate-900 bg-slate-900 px-5 py-3 text-xs font-semibold text-white transition hover:border-indigo-600 hover:bg-indigo-600"
                       >
                         Apply
@@ -1091,7 +1253,7 @@ function Checkout() {
                   <button
                     type="button"
                     onClick={handlePlaceOrder}
-                    disabled={loading}
+                    disabled={loading || !checkoutItems.length}
                     className="mt-5 flex min-h-[50px] w-full items-center justify-center rounded-xl bg-slate-900 py-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {loading ? (
@@ -1099,6 +1261,8 @@ function Checkout() {
                         <Loader2 size={16} className="animate-spin" />
                         Placing Order...
                       </span>
+                    ) : isBuyNow ? (
+                      "Buy Now & Place Order"
                     ) : (
                       "Place Order"
                     )}
@@ -1147,6 +1311,44 @@ function Checkout() {
           </div>
         </div>
       </div>
+
+      {/* =================================================
+          MOBILE BOTTOM ORDER BAR
+      ================================================= */}
+
+      {checkoutItems.length > 0 && (
+        <div className="fixed right-0 bottom-0 left-0 z-50 border-t border-slate-200 bg-white p-2.5 shadow-[0_-5px_20px_rgba(0,0,0,0.08)] lg:hidden">
+          <div className="mx-auto flex max-w-6xl items-center gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] text-slate-500">
+                {totalQuantity} {totalQuantity === 1 ? "item" : "items"}
+              </p>
+
+              <p className="text-base font-extrabold text-slate-900">
+                ₹{Number(finalTotal).toLocaleString("en-IN")}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handlePlaceOrder}
+              disabled={loading}
+              className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[#ff9f00] px-4 text-sm font-bold text-white active:scale-[0.98] disabled:opacity-50"
+            >
+              {loading ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Placing...
+                </>
+              ) : isBuyNow ? (
+                "Buy Now"
+              ) : (
+                "Place Order"
+              )}
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -1,21 +1,13 @@
 const { getIO } = require("../socket/socket");
 
 const Notification = require("../models/Notification");
-
 const Order = require("../models/Order");
-
 const Cart = require("../models/Cart");
-
 const Coupon = require("../models/Coupon");
-
 const User = require("../models/User");
-
 const Product = require("../models/Product");
-
 const sendEmail = require("../utils/sendEmail");
-
 const PDFDocument = require("pdfkit");
-
 const Address = require("../models/Address");
 
 // =====================================================
@@ -34,7 +26,6 @@ const calculateDistanceKm = (lat1, lon1, lat2, lon2) => {
   const R = 6371;
 
   const dLat = toRad(lat2 - lat1);
-
   const dLon = toRad(lon2 - lon1);
 
   const a =
@@ -57,7 +48,6 @@ const hasValidCoordinates = (location) => {
   if (!location) return false;
 
   const latitude = Number(location.latitude);
-
   const longitude = Number(location.longitude);
 
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
@@ -80,40 +70,111 @@ const hasValidCoordinates = (location) => {
 // =====================================================
 
 exports.createOrder = async (req, res) => {
-  const { coupon, addressId } = req.body;
+  const { coupon, addressId, buyNow = false, productId, quantity } = req.body;
 
   try {
+    let checkoutItems = [];
+    let cartItems = [];
+
+    const isBuyNow = buyNow === true || buyNow === "true";
+
     // =================================================
-    // GET CART
+    // PREPARE ORDER ITEMS
     // =================================================
 
-    const cartItems = await Cart.find({
-      user: req.user.id,
-    }).populate("product");
+    if (isBuyNow) {
+      // -------------------------------------------------
+      // BUY NOW MODE
+      // -------------------------------------------------
 
-    if (cartItems.length === 0) {
+      if (!productId) {
+        return res.status(400).json({
+          message: "Product is required for Buy Now",
+          code: "PRODUCT_REQUIRED",
+        });
+      }
+
+      const buyNowQuantity = Number(quantity);
+
+      if (!Number.isInteger(buyNowQuantity) || buyNowQuantity < 1) {
+        return res.status(400).json({
+          message: "Invalid product quantity",
+          code: "INVALID_QUANTITY",
+        });
+      }
+
+      // Get selected product directly
+      const buyNowProduct = await Product.findById(productId).populate(
+        "seller",
+        "_id name email location",
+      );
+
+      if (!buyNowProduct) {
+        return res.status(404).json({
+          message: "Product not found",
+          code: "PRODUCT_NOT_FOUND",
+        });
+      }
+
+      checkoutItems = [
+        {
+          product: buyNowProduct,
+          quantity: buyNowQuantity,
+        },
+      ];
+    } else {
+      // -------------------------------------------------
+      // NORMAL CART CHECKOUT MODE
+      // -------------------------------------------------
+
+      cartItems = await Cart.find({
+        user: req.user.id,
+      }).populate("product");
+
+      if (cartItems.length === 0) {
+        return res.status(400).json({
+          message: "Cart is empty",
+          code: "CART_EMPTY",
+        });
+      }
+
+      checkoutItems = cartItems
+        .filter((item) => item.product)
+        .map((item) => ({
+          product: item.product,
+          quantity: Number(item.quantity || 0),
+        }))
+        .filter((item) => item.quantity > 0);
+    }
+
+    // =================================================
+    // VALIDATE CHECKOUT ITEMS
+    // =================================================
+
+    if (checkoutItems.length === 0) {
       return res.status(400).json({
-        message: "Cart is empty",
+        message: "No valid products found for order",
+        code: "NO_VALID_PRODUCTS",
       });
     }
 
     // =================================================
-    // CALCULATE TOTAL
+    // CALCULATE TOTAL + BUILD ORDER PRODUCTS
     // =================================================
 
     let totalAmount = 0;
 
     const products = [];
 
-    cartItems.forEach((item) => {
-      if (!item.product) return;
+    checkoutItems.forEach((item) => {
+      const itemPrice = Number(item.product?.price || 0);
+      const itemQuantity = Number(item.quantity || 0);
 
-      totalAmount +=
-        Number(item.product.price || 0) * Number(item.quantity || 0);
+      totalAmount += itemPrice * itemQuantity;
 
       products.push({
         product: item.product._id,
-        quantity: item.quantity,
+        quantity: itemQuantity,
       });
     });
 
@@ -121,12 +182,11 @@ exports.createOrder = async (req, res) => {
     // STOCK CHECK
     // =================================================
 
-    for (const item of cartItems) {
-      if (!item.product) continue;
-
-      if (item.product.stock < item.quantity) {
+    for (const item of checkoutItems) {
+      if (Number(item.product.stock || 0) < Number(item.quantity || 0)) {
         return res.status(400).json({
           message: `${item.product.title} is out of stock`,
+          code: "OUT_OF_STOCK",
         });
       }
     }
@@ -153,16 +213,6 @@ exports.createOrder = async (req, res) => {
       });
     }
 
-    // =================================================
-    // VALIDATE PRODUCTS
-    // =================================================
-
-    if (products.length === 0) {
-      return res.status(400).json({
-        message: "No valid products found in cart",
-      });
-    }
-
     // =========================================================
     // OPTIONAL 30 KM DELIVERY VALIDATION
     // =========================================================
@@ -171,21 +221,28 @@ exports.createOrder = async (req, res) => {
 
     console.log("CUSTOMER LOCATION AVAILABLE:", customerHasLocation);
 
+    console.log("CHECKOUT MODE:", isBuyNow ? "BUY NOW" : "CART");
+
     // =================================================
     // GET SELLER IDS
     // =================================================
 
     const sellerIds = [
       ...new Set(
-        cartItems
-          .filter((item) => item.product && item.product.seller)
-          .map((item) => item.product.seller.toString()),
+        checkoutItems
+          .filter((item) => item.product?.seller)
+          .map((item) => {
+            const seller = item.product.seller;
+
+            return seller?._id ? seller._id.toString() : seller.toString();
+          }),
       ),
     ];
 
     if (sellerIds.length === 0) {
       return res.status(400).json({
-        message: "No valid seller found for products in cart.",
+        message: "No valid seller found for products.",
+        code: "SELLER_NOT_FOUND",
       });
     }
 
@@ -205,19 +262,21 @@ exports.createOrder = async (req, res) => {
     );
 
     // =================================================
-    // CHECK EVERY PRODUCT
+    // CHECK EVERY PRODUCT FOR 30 KM DELIVERY
     // =================================================
 
-    for (const item of cartItems) {
-      if (!item.product) continue;
-
+    for (const item of checkoutItems) {
       const product = item.product;
 
-      // =================================================
-      // SELLER ID CHECK
-      // =================================================
+      const sellerId = product.seller?._id
+        ? product.seller._id.toString()
+        : product.seller
+          ? product.seller.toString()
+          : null;
 
-      const sellerId = product.seller ? product.seller.toString() : null;
+      // -------------------------------------------------
+      // SELLER ID CHECK
+      // -------------------------------------------------
 
       if (!sellerId) {
         return res.status(400).json({
@@ -235,9 +294,9 @@ exports.createOrder = async (req, res) => {
         });
       }
 
-      // =================================================
+      // -------------------------------------------------
       // CUSTOMER LOCATION NOT AVAILABLE
-      // =================================================
+      // -------------------------------------------------
 
       if (!customerHasLocation) {
         console.log(
@@ -247,15 +306,11 @@ exports.createOrder = async (req, res) => {
         continue;
       }
 
-      // =================================================
-      // CUSTOMER LOCATION EXISTS
-      // =================================================
+      // -------------------------------------------------
+      // SELLER LOCATION CHECK
+      // -------------------------------------------------
 
       const sellerHasLocation = hasValidCoordinates(seller.location);
-
-      // =================================================
-      // SELLER LOCATION NOT AVAILABLE
-      // =================================================
 
       if (!sellerHasLocation) {
         console.log(
@@ -265,25 +320,25 @@ exports.createOrder = async (req, res) => {
         continue;
       }
 
-      // =================================================
+      // -------------------------------------------------
       // CUSTOMER COORDINATES
-      // =================================================
+      // -------------------------------------------------
 
       const customerLat = Number(selectedAddress.location.latitude);
 
       const customerLng = Number(selectedAddress.location.longitude);
 
-      // =================================================
+      // -------------------------------------------------
       // SELLER COORDINATES
-      // =================================================
+      // -------------------------------------------------
 
       const sellerLat = Number(seller.location.latitude);
 
       const sellerLng = Number(seller.location.longitude);
 
-      // =================================================
+      // -------------------------------------------------
       // CALCULATE DISTANCE
-      // =================================================
+      // -------------------------------------------------
 
       const distance = calculateDistanceKm(
         customerLat,
@@ -298,9 +353,9 @@ exports.createOrder = async (req, res) => {
         )} KM`,
       );
 
-      // =================================================
+      // -------------------------------------------------
       // 30 KM LIMIT
-      // =================================================
+      // -------------------------------------------------
 
       if (distance > DELIVERY_RADIUS_KM) {
         return res.status(400).json({
@@ -360,11 +415,17 @@ exports.createOrder = async (req, res) => {
 
       shippingAddress: {
         fullName: selectedAddress.fullName,
+
         phone: selectedAddress.phone,
+
         address: selectedAddress.address,
+
         city: selectedAddress.city,
+
         state: selectedAddress.state,
+
         pincode: selectedAddress.pincode,
+
         landmark: selectedAddress.landmark,
       },
     });
@@ -373,21 +434,26 @@ exports.createOrder = async (req, res) => {
     // REDUCE STOCK
     // =================================================
 
-    for (const item of cartItems) {
-      if (!item.product) continue;
-
-      item.product.stock = item.product.stock - item.quantity;
+    for (const item of checkoutItems) {
+      item.product.stock =
+        Number(item.product.stock || 0) - Number(item.quantity || 0);
 
       await item.product.save();
     }
 
     // =================================================
     // CLEAR CART
+    //
+    // IMPORTANT:
+    // Buy Now -> DO NOT CLEAR CART
+    // Cart Checkout -> CLEAR CART
     // =================================================
 
-    await Cart.deleteMany({
-      user: req.user.id,
-    });
+    if (!isBuyNow) {
+      await Cart.deleteMany({
+        user: req.user.id,
+      });
+    }
 
     // =================================================
     // SEND SUCCESS RESPONSE IMMEDIATELY
@@ -395,7 +461,10 @@ exports.createOrder = async (req, res) => {
 
     res.status(201).json({
       message: "Order Created Successfully",
+
       order,
+
+      checkoutMode: isBuyNow ? "buyNow" : "cart",
     });
 
     // =================================================
@@ -404,21 +473,23 @@ exports.createOrder = async (req, res) => {
 
     setImmediate(async () => {
       try {
-        // =================================================
+        // -------------------------------------------------
         // GET USER
-        // =================================================
+        // -------------------------------------------------
 
         const user = await User.findById(req.user.id);
 
-        // =================================================
+        // -------------------------------------------------
         // SEND EMAIL
-        // =================================================
+        // -------------------------------------------------
 
         if (user) {
           try {
             await sendEmail(
               user.email,
+
               "Order Confirmed - ZentraCart",
+
               `Hello ${user.name},
 
 Your order has been placed successfully.
@@ -436,23 +507,25 @@ Thank you for shopping with ZentraCart.`,
           }
         }
 
-        // =================================================
+        // -------------------------------------------------
         // SAVE NOTIFICATION
-        // =================================================
+        // -------------------------------------------------
 
         try {
           await Notification.create({
             user: req.user.id,
+
             title: "Order Placed",
+
             message: `Your order #${order._id} has been placed successfully`,
           });
         } catch (notificationError) {
           console.error("NOTIFICATION ERROR:", notificationError.message);
         }
 
-        // =================================================
+        // -------------------------------------------------
         // SOCKET NOTIFICATION
-        // =================================================
+        // -------------------------------------------------
 
         try {
           const io = getIO();
@@ -460,7 +533,9 @@ Thank you for shopping with ZentraCart.`,
           if (io) {
             io.emit("newOrder", {
               message: "New Order Placed",
+
               orderId: order._id,
+
               totalAmount: order.totalAmount,
             });
           }
@@ -526,6 +601,7 @@ exports.getSellerOrders = async (req, res) => {
       if (sellerProducts.length > 0) {
         sellerOrders.push({
           ...order.toObject(),
+
           products: sellerProducts,
         });
       }
@@ -564,6 +640,7 @@ exports.updateOrderStatus = async (req, res) => {
 
     res.json({
       message: "Order Status Updated",
+
       order,
     });
   } catch (error) {
@@ -632,6 +709,7 @@ exports.cancelOrder = async (req, res) => {
 
     res.json({
       message: "Order Cancelled Successfully",
+
       order,
     });
   } catch (error) {

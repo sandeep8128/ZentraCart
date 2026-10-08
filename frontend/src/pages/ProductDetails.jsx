@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 
 import API from "../services/api";
@@ -27,9 +27,9 @@ import {
   increaseWishlistCount,
 } from "../redux/slices/cartSlice";
 
-// =====================================================
-// HELPERS
-// =====================================================
+/* =====================================================
+   HELPERS
+===================================================== */
 
 const getImageUrl = (image) => {
   if (!image) return "";
@@ -51,9 +51,9 @@ const formatINR = (value) => {
   return `₹${number.toLocaleString("en-IN")}`;
 };
 
-// =====================================================
-// SECTION HEADER
-// =====================================================
+/* =====================================================
+   SECTION HEADER
+===================================================== */
 
 function SectionHeader({ children }) {
   return (
@@ -67,9 +67,9 @@ function SectionHeader({ children }) {
   );
 }
 
-// =====================================================
-// STAR RATING
-// =====================================================
+/* =====================================================
+   STAR RATING
+===================================================== */
 
 function StarRating({ value, size = "text-sm" }) {
   const rating = Math.max(0, Math.min(5, Math.round(Number(value) || 0)));
@@ -82,25 +82,31 @@ function StarRating({ value, size = "text-sm" }) {
   );
 }
 
-// =====================================================
-// PRODUCT DETAILS
-// =====================================================
+/* =====================================================
+   PRODUCT DETAILS
+===================================================== */
 
 function ProductDetails() {
   const { user, token } = useSelector((state) => state.auth);
 
   const { id } = useParams();
 
+  const navigate = useNavigate();
+
   const dispatch = useDispatch();
 
-  // =====================================================
-  // STATES
-  // =====================================================
+  /* =====================================================
+     STATES
+  ===================================================== */
 
   const [product, setProduct] = useState(null);
+
   const [reviews, setReviews] = useState([]);
+
   const [rating, setRating] = useState(5);
+
   const [comment, setComment] = useState("");
+
   const [relatedProducts, setRelatedProducts] = useState([]);
 
   const [selectedImage, setSelectedImage] = useState("");
@@ -117,13 +123,15 @@ function ProductDetails() {
 
   const [addingCart, setAddingCart] = useState(false);
 
+  const [buyingNow, setBuyingNow] = useState(false);
+
   const [addingWishlist, setAddingWishlist] = useState(false);
 
   const [submittingReview, setSubmittingReview] = useState(false);
 
-  // =====================================================
-  // FETCH PRODUCT
-  // =====================================================
+  /* =====================================================
+     FETCH PRODUCT
+  ===================================================== */
 
   const fetchProduct = async () => {
     try {
@@ -175,9 +183,7 @@ function ProductDetails() {
         setSelectedImage(getImageUrl(fetchedProduct.images[0]));
       }
 
-      // =================================================
-      // RECENT PRODUCTS
-      // =================================================
+      /* Recently Viewed */
 
       try {
         let viewed = JSON.parse(localStorage.getItem("recentProducts")) || [];
@@ -201,9 +207,9 @@ function ProductDetails() {
     }
   };
 
-  // =====================================================
-  // FETCH REVIEWS
-  // =====================================================
+  /* =====================================================
+     FETCH REVIEWS
+  ===================================================== */
 
   const fetchReviews = async () => {
     try {
@@ -215,9 +221,9 @@ function ProductDetails() {
     }
   };
 
-  // =====================================================
-  // INITIAL LOAD
-  // =====================================================
+  /* =====================================================
+     INITIAL LOAD
+  ===================================================== */
 
   useEffect(() => {
     fetchProduct();
@@ -226,9 +232,9 @@ function ProductDetails() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // =====================================================
-  // LOCATION CHANGE
-  // =====================================================
+  /* =====================================================
+     LOCATION CHANGE
+  ===================================================== */
 
   useEffect(() => {
     const handleLocationChanged = () => {
@@ -237,6 +243,7 @@ function ProductDetails() {
 
         if (!stored) {
           setLocation(null);
+          fetchProduct();
           return;
         }
 
@@ -270,9 +277,9 @@ function ProductDetails() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // =====================================================
-  // ADD TO CART
-  // =====================================================
+  /* =====================================================
+     ADD TO CART
+  ===================================================== */
 
   const handleAddToCart = async () => {
     if (!token) {
@@ -312,9 +319,47 @@ function ProductDetails() {
     }
   };
 
-  // =====================================================
-  // ADD TO WISHLIST
-  // =====================================================
+  /* =====================================================
+   BUY NOW
+===================================================== */
+
+  const handleBuyNow = () => {
+    if (!token) {
+      toast.error("Please login to buy this product.");
+      return;
+    }
+
+    if (!product?._id) {
+      return;
+    }
+
+    if (hasDistance && !withinDelivery) {
+      toast.error("This product is outside your 30 KM delivery range.");
+      return;
+    }
+
+    try {
+      setBuyingNow(true);
+
+      navigate("/checkout", {
+        state: {
+          buyNow: {
+            product,
+            quantity,
+          },
+        },
+      });
+    } catch (error) {
+      console.log(error);
+
+      toast.error("Unable to continue to checkout");
+      setBuyingNow(false);
+    }
+  };
+
+  /* =====================================================
+     ADD TO WISHLIST
+  ===================================================== */
 
   const handleAddToWishlist = async () => {
     if (!token) {
@@ -351,9 +396,9 @@ function ProductDetails() {
     }
   };
 
-  // =====================================================
-  // ADD REVIEW
-  // =====================================================
+  /* =====================================================
+     ADD REVIEW
+  ===================================================== */
 
   const handleAddReview = async () => {
     if (!token) {
@@ -389,10 +434,13 @@ function ProductDetails() {
       toast.success(res.data?.message || "Review Added Successfully");
 
       setRating(5);
+
       setComment("");
+
       setReviewImages([]);
 
       await fetchReviews();
+
       await fetchProduct();
     } catch (error) {
       console.log(error.response?.data || error.message);
@@ -403,9 +451,9 @@ function ProductDetails() {
     }
   };
 
-  // =====================================================
-  // DELETE REVIEW
-  // =====================================================
+  /* =====================================================
+     DELETE REVIEW
+  ===================================================== */
 
   const handleDeleteReview = async (reviewId) => {
     if (!token) {
@@ -422,6 +470,7 @@ function ProductDetails() {
       toast.success(res.data?.message || "Review Deleted");
 
       await fetchReviews();
+
       await fetchProduct();
     } catch (error) {
       console.log(error.response?.data || error.message);
@@ -430,9 +479,9 @@ function ProductDetails() {
     }
   };
 
-  // =====================================================
-  // IMAGE ZOOM
-  // =====================================================
+  /* =====================================================
+     IMAGE ZOOM
+  ===================================================== */
 
   const handleImageMove = (event) => {
     if (window.innerWidth < 768) {
@@ -459,9 +508,9 @@ function ProductDetails() {
     });
   };
 
-  // =====================================================
-  // LOADING
-  // =====================================================
+  /* =====================================================
+     LOADING
+  ===================================================== */
 
   if (!product) {
     return (
@@ -481,9 +530,9 @@ function ProductDetails() {
     );
   }
 
-  // =====================================================
-  // PRODUCT DATA
-  // =====================================================
+  /* =====================================================
+     PRODUCT DATA
+  ===================================================== */
 
   const images = product.images?.length > 0 ? product.images : [];
 
@@ -506,15 +555,15 @@ function ProductDetails() {
 
   const withinDelivery = hasDistance && distance <= 30;
 
-  // =====================================================
-  // MAIN UI
-  // =====================================================
+  /* =====================================================
+     MAIN UI
+  ===================================================== */
 
   return (
     <>
       <Navbar />
 
-      <div className="min-h-screen overflow-x-hidden bg-[#FAF7F6]">
+      <div className="min-h-screen overflow-x-hidden bg-[#FAF7F6] pb-20 sm:pb-0">
         <div className="mx-auto max-w-7xl space-y-4 px-3 py-4 sm:space-y-6 sm:px-6 sm:py-7 lg:px-6">
           {/* =================================================
               BREADCRUMB
@@ -796,28 +845,49 @@ function ProductDetails() {
                 </div>
 
                 {/* =================================================
-                    ACTION BUTTONS
+                    DESKTOP ACTION BUTTONS
                 ================================================= */}
 
-                <div className="mt-5 grid grid-cols-2 gap-2.5 sm:mt-6 sm:flex sm:gap-3">
+                <div className="mt-5 hidden grid-cols-3 gap-3 sm:mt-6 sm:grid">
+                  {/* ADD TO CART */}
+
                   <button
                     type="button"
                     onClick={handleAddToCart}
-                    disabled={addingCart}
-                    className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-60 sm:flex-1 sm:text-sm"
+                    disabled={addingCart || buyingNow}
+                    className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-slate-900 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:border-indigo-600 hover:bg-indigo-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    <ShoppingCart size={16} />
+                    <ShoppingCart size={17} />
 
                     {addingCart ? "Adding..." : "Add to Cart"}
                   </button>
+
+                  {/* BUY NOW */}
+
+                  <button
+                    type="button"
+                    onClick={handleBuyNow}
+                    disabled={
+                      buyingNow ||
+                      addingCart ||
+                      (hasDistance && !withinDelivery)
+                    }
+                    className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#ffc107] px-4 py-3 text-sm font-extrabold text-slate-900 shadow-sm transition hover:bg-[#ffb300] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {buyingNow
+                      ? "Processing..."
+                      : `Buy Now at ${formatINR(price * quantity)}`}
+                  </button>
+
+                  {/* WISHLIST */}
 
                   <button
                     type="button"
                     onClick={handleAddToWishlist}
                     disabled={addingWishlist}
-                    className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-900 bg-white px-3 py-2.5 text-xs font-semibold text-slate-900 transition hover:border-indigo-600 hover:bg-indigo-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 sm:flex-1 sm:text-sm"
+                    className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    <Heart size={16} />
+                    <Heart size={17} />
 
                     {addingWishlist ? "Adding..." : "Wishlist"}
                   </button>
@@ -935,9 +1005,13 @@ function ProductDetails() {
                   className="mb-3 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-slate-900 focus:bg-white sm:max-w-xs"
                 >
                   <option value={5}>⭐⭐⭐⭐⭐ — 5 Stars</option>
+
                   <option value={4}>⭐⭐⭐⭐ — 4 Stars</option>
+
                   <option value={3}>⭐⭐⭐ — 3 Stars</option>
+
                   <option value={2}>⭐⭐ — 2 Stars</option>
+
                   <option value={1}>⭐ — 1 Star</option>
                 </select>
 
@@ -1076,6 +1150,42 @@ function ProductDetails() {
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* =====================================================
+          MOBILE STICKY BUY BAR
+      ===================================================== */}
+
+      <div className="fixed right-0 bottom-0 left-0 z-50 border-t border-slate-200 bg-white/95 p-2.5 shadow-[0_-8px_24px_rgba(0,0,0,0.12)] backdrop-blur sm:hidden">
+        <div className="mx-auto flex max-w-7xl gap-2">
+          {/* ADD TO CART */}
+
+          <button
+            type="button"
+            onClick={handleAddToCart}
+            disabled={addingCart || buyingNow}
+            className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2 text-[12px] font-bold text-slate-900 disabled:opacity-60"
+          >
+            <ShoppingCart size={16} />
+
+            {addingCart ? "Adding..." : "Add to Cart"}
+          </button>
+
+          {/* BUY NOW */}
+
+          <button
+            type="button"
+            onClick={handleBuyNow}
+            disabled={
+              buyingNow || addingCart || (hasDistance && !withinDelivery)
+            }
+            className="flex h-12 flex-[1.15] items-center justify-center rounded-lg bg-[#ffc107] px-2 text-[12px] font-extrabold text-slate-900 shadow-sm disabled:opacity-60"
+          >
+            {buyingNow
+              ? "Processing..."
+              : `Buy Now at ${formatINR(price * quantity)}`}
+          </button>
         </div>
       </div>
     </>
