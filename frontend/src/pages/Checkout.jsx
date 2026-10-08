@@ -1333,7 +1333,7 @@ function Checkout() {
               type="button"
               onClick={handlePlaceOrder}
               disabled={loading}
-              className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[#ff9f00] px-4 text-sm font-bold text-white active:scale-[0.98] disabled:opacity-50"
+              className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[#7C3AED] px-4 text-sm font-bold text-white hover:bg-[#6D28D9] active:scale-[0.98] disabled:opacity-50"
             >
               {loading ? (
                 <>
