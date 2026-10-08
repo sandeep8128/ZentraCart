@@ -1180,7 +1180,7 @@ function ProductDetails() {
             disabled={
               buyingNow || addingCart || (hasDistance && !withinDelivery)
             }
-            className="flex h-12 flex-[1.15] items-center justify-center rounded-lg bg-[#ffc107] px-2 text-[12px] font-extrabold text-slate-900 shadow-sm disabled:opacity-60"
+            className="flex h-12 flex-[1.15] items-center justify-center rounded-lg bg-[#7C3AED] px-2 text-[12px] font-extrabold text-white shadow-sm hover:bg-[#6D28D9] disabled:opacity-60"
           >
             {buyingNow
               ? "Processing..."
