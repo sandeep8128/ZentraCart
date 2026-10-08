@@ -1,13 +1,9 @@
 import { useState, useEffect, useRef } from "react";
-
-import { Link, useNavigate } from "react-router-dom";
-
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 
 import { logout } from "../redux/slices/authSlice";
-
 import API from "../services/api";
-
 import { setCartCount, setWishlistCount } from "../redux/slices/cartSlice";
 
 import {
@@ -30,7 +26,7 @@ import {
 
 function Navbar() {
   const navigate = useNavigate();
-
+  const routeLocation = useLocation();
   const dispatch = useDispatch();
 
   // =====================================================
@@ -38,16 +34,12 @@ function Navbar() {
   // =====================================================
 
   const [search, setSearch] = useState("");
-
   const [profileOpen, setProfileOpen] = useState(false);
-
   const [mobileOpen, setMobileOpen] = useState(false);
 
   // Optional delivery location
-  const [location, setLocation] = useState(null);
-
+  const [deliveryLocation, setDeliveryLocation] = useState(null);
   const [locationLoading, setLocationLoading] = useState(false);
-
   const [locationError, setLocationError] = useState("");
 
   const profileRef = useRef(null);
@@ -61,6 +53,35 @@ function Navbar() {
   const { user, isAuthenticated, role } = useSelector((state) => state.auth);
 
   // =====================================================
+  // BUY NOW CHECKOUT DETECTION
+  // =====================================================
+
+  /*
+    IMPORTANT:
+
+    Normal checkout:
+      /checkout
+
+    Buy Now checkout:
+      /checkout
+      state = {
+        buyNow: {
+          product: {...},
+          quantity: 1
+        }
+      }
+
+    In Buy Now mode we MUST NOT call /cart.
+  */
+
+  const isBuyNowCheckout =
+    routeLocation.pathname === "/checkout" &&
+    Boolean(
+      routeLocation.state?.buyNow?.product?._id ||
+      routeLocation.state?.buyNow?.product?.id,
+    );
+
+  // =====================================================
   // LOAD SAVED LOCATION
   // =====================================================
 
@@ -69,28 +90,30 @@ function Navbar() {
       const savedLocation = localStorage.getItem("zentraCartLocation");
 
       if (!savedLocation) {
-        setLocation(null);
+        setDeliveryLocation(null);
         return;
       }
 
       const parsed = JSON.parse(savedLocation);
 
-      if (
-        Number.isFinite(Number(parsed.latitude)) &&
-        Number.isFinite(Number(parsed.longitude))
-      ) {
-        setLocation({
-          latitude: Number(parsed.latitude),
-          longitude: Number(parsed.longitude),
+      const latitude = Number(parsed.latitude);
+      const longitude = Number(parsed.longitude);
+
+      if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+        setDeliveryLocation({
+          latitude,
+          longitude,
           address: parsed.address || "",
         });
+      } else {
+        setDeliveryLocation(null);
       }
     } catch (error) {
       console.log("Location load error:", error);
 
       localStorage.removeItem("zentraCartLocation");
 
-      setLocation(null);
+      setDeliveryLocation(null);
     }
   }, []);
 
@@ -103,7 +126,6 @@ function Navbar() {
 
     if (!navigator.geolocation) {
       setLocationError("Location is not supported by this browser.");
-
       return;
     }
 
@@ -126,37 +148,33 @@ function Navbar() {
             address: "",
           };
 
-          // =================================================
-          // SAVE IN LOCAL STORAGE
-          // =================================================
-
+          // Save locally
           localStorage.setItem(
             "zentraCartLocation",
             JSON.stringify(newLocation),
           );
 
-          setLocation(newLocation);
+          setDeliveryLocation(newLocation);
 
-          // =================================================
-          // SAVE TO USER ACCOUNT IF LOGGED IN
-          // =================================================
-
+          // Save to logged-in user
           if (isAuthenticated) {
             try {
               const token = localStorage.getItem("token");
 
-              await API.put(
-                "/auth/location",
-                {
-                  latitude,
-                  longitude,
-                },
-                {
-                  headers: {
-                    Authorization: `Bearer ${token}`,
+              if (token) {
+                await API.put(
+                  "/auth/location",
+                  {
+                    latitude,
+                    longitude,
                   },
-                },
-              );
+                  {
+                    headers: {
+                      Authorization: `Bearer ${token}`,
+                    },
+                  },
+                );
+              }
             } catch (error) {
               console.log(
                 "Server location save skipped:",
@@ -165,8 +183,7 @@ function Navbar() {
             }
           }
 
-          // Refresh current page so products
-          // can use the new location.
+          // Notify other components
           window.dispatchEvent(new Event("zentraCartLocationChanged"));
         } catch (error) {
           console.log("Location save error:", error);
@@ -210,8 +227,7 @@ function Navbar() {
   const handleClearLocation = () => {
     localStorage.removeItem("zentraCartLocation");
 
-    setLocation(null);
-
+    setDeliveryLocation(null);
     setLocationError("");
 
     window.dispatchEvent(new Event("zentraCartLocationChanged"));
@@ -225,7 +241,6 @@ function Navbar() {
     dispatch(logout());
 
     setMobileOpen(false);
-
     setProfileOpen(false);
 
     navigate("/login");
@@ -236,30 +251,79 @@ function Navbar() {
   // =====================================================
 
   const handleSearch = () => {
-    if (!search.trim()) return;
+    const keyword = search.trim();
 
-    navigate(`/products?keyword=${encodeURIComponent(search.trim())}`);
+    if (!keyword) return;
+
+    navigate(`/products?keyword=${encodeURIComponent(keyword)}`);
 
     setSearch("");
-
     setMobileOpen(false);
   };
 
   // =====================================================
-  // FETCH CART + WISHLIST
+  // FETCH CART + WISHLIST COUNTS
   // =====================================================
 
   const fetchCounts = async () => {
     try {
+      // -----------------------------------------------
+      // LOGGED OUT
+      // -----------------------------------------------
+
       if (!isAuthenticated) {
         dispatch(setCartCount(0));
-
         dispatch(setWishlistCount(0));
-
         return;
       }
 
       const token = localStorage.getItem("token");
+
+      if (!token) {
+        dispatch(setCartCount(0));
+        dispatch(setWishlistCount(0));
+        return;
+      }
+
+      // -----------------------------------------------
+      // 🔥 IMPORTANT BUY NOW FIX
+      // -----------------------------------------------
+
+      /*
+        Buy Now checkout does NOT depend on cart.
+
+        Therefore:
+
+        ❌ DO NOT call /cart
+        ❌ DO NOT trigger cart-empty handling
+
+        Only wishlist count is fetched.
+      */
+
+      if (isBuyNowCheckout) {
+        dispatch(setCartCount(0));
+
+        try {
+          const wishlistRes = await API.get("/wishlist", {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
+
+          dispatch(setWishlistCount(wishlistRes.data?.count || 0));
+        } catch (wishlistError) {
+          console.log(
+            "Wishlist count error:",
+            wishlistError.response?.data || wishlistError.message,
+          );
+        }
+
+        return;
+      }
+
+      // -----------------------------------------------
+      // NORMAL MODE
+      // -----------------------------------------------
 
       const [cartRes, wishlistRes] = await Promise.all([
         API.get("/cart", {
@@ -275,17 +339,33 @@ function Navbar() {
         }),
       ]);
 
-      dispatch(setCartCount(cartRes.data.count || 0));
+      dispatch(setCartCount(cartRes.data?.count || 0));
 
-      dispatch(setWishlistCount(wishlistRes.data.count || 0));
+      dispatch(setWishlistCount(wishlistRes.data?.count || 0));
     } catch (error) {
+      /*
+        IMPORTANT:
+
+        Never show toast here.
+
+        Especially don't show:
+        "Cart is empty"
+
+        because Navbar is only responsible
+        for displaying count.
+      */
+
       console.log("Navbar count error:", error.response?.data || error.message);
     }
   };
 
+  // =====================================================
+  // FETCH COUNTS ON ROUTE / AUTH CHANGE
+  // =====================================================
+
   useEffect(() => {
     fetchCounts();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, routeLocation.pathname, isBuyNowCheckout]);
 
   // =====================================================
   // LOCATION CHANGE LISTENER
@@ -297,24 +377,29 @@ function Navbar() {
         const saved = localStorage.getItem("zentraCartLocation");
 
         if (!saved) {
-          setLocation(null);
+          setDeliveryLocation(null);
           return;
         }
 
         const parsed = JSON.parse(saved);
 
-        if (
-          Number.isFinite(Number(parsed.latitude)) &&
-          Number.isFinite(Number(parsed.longitude))
-        ) {
-          setLocation({
-            latitude: Number(parsed.latitude),
-            longitude: Number(parsed.longitude),
+        const latitude = Number(parsed.latitude);
+
+        const longitude = Number(parsed.longitude);
+
+        if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+          setDeliveryLocation({
+            latitude,
+            longitude,
             address: parsed.address || "",
           });
+        } else {
+          setDeliveryLocation(null);
         }
-      } catch {
-        setLocation(null);
+      } catch (error) {
+        console.log("Location listener error:", error);
+
+        setDeliveryLocation(null);
       }
     };
 
@@ -333,8 +418,8 @@ function Navbar() {
   // =====================================================
 
   useEffect(() => {
-    const handler = (e) => {
-      if (profileRef.current && !profileRef.current.contains(e.target)) {
+    const handler = (event) => {
+      if (profileRef.current && !profileRef.current.contains(event.target)) {
         setProfileOpen(false);
       }
     };
@@ -350,26 +435,29 @@ function Navbar() {
   // NAV ICON BUTTON
   // =====================================================
 
-  const NavIconButton = ({ onClick, icon, count, label }) => (
-    <button
-      onClick={onClick}
-      className="group relative flex flex-col items-center justify-center gap-1 rounded-xl px-2.5 py-1.5 text-slate-200 transition-all duration-200 hover:-translate-y-0.5 hover:bg-white/10 hover:text-white"
-    >
-      <span className="relative">
-        {icon}
+  const NavIconButton = ({ onClick, icon, count, label }) => {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="group relative flex flex-col items-center justify-center gap-1 rounded-xl px-2.5 py-1.5 text-slate-200 transition-all duration-200 hover:-translate-y-0.5 hover:bg-white/10 hover:text-white"
+      >
+        <span className="relative">
+          {icon}
 
-        {count > 0 && (
-          <span className="absolute -top-1.5 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-400 px-1 text-[9px] font-bold text-slate-900 shadow-md">
-            {count > 9 ? "9+" : count}
-          </span>
-        )}
-      </span>
+          {count > 0 && (
+            <span className="absolute -top-1.5 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-400 px-1 text-[9px] font-bold text-slate-900 shadow-md">
+              {count > 9 ? "9+" : count}
+            </span>
+          )}
+        </span>
 
-      <span className="hidden text-[11px] leading-none font-medium lg:block">
-        {label}
-      </span>
-    </button>
-  );
+        <span className="hidden text-[11px] leading-none font-medium lg:block">
+          {label}
+        </span>
+      </button>
+    );
+  };
 
   // =====================================================
   // CLOSE MOBILE MENU
@@ -383,7 +471,7 @@ function Navbar() {
   // LOCATION LABEL
   // =====================================================
 
-  const locationLabel = location ? "30 KM ON" : "Location";
+  const locationLabel = deliveryLocation ? "30 KM ON" : "Location";
 
   // =====================================================
   // RENDER
@@ -391,22 +479,21 @@ function Navbar() {
 
   return (
     <nav className="sticky top-0 z-50 border-b border-white/10 bg-gradient-to-r from-[#0b2435] via-[#16405a] to-[#0b2435] shadow-lg">
-      {/* =====================================================
+      {/* =================================================
           MAIN NAVBAR
-      ===================================================== */}
+      ================================================= */}
 
       <div className="mx-auto flex w-full max-w-7xl items-center gap-2 px-3 py-2.5 sm:gap-3 sm:px-6 sm:py-3">
         {/* =================================================
-            PREMIUM LOGO
+            LOGO
         ================================================= */}
 
         <button
+          type="button"
           onClick={() => navigate("/")}
           aria-label="ZentraCart Home"
           className="group flex min-w-0 shrink-0 items-center gap-2 sm:gap-2.5"
         >
-          {/* LOGO ICON */}
-
           <span className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-cyan-400 via-indigo-500 to-fuchsia-500 shadow-[0_6px_18px_rgba(99,102,241,0.35)] transition-all duration-300 group-hover:scale-105 group-hover:shadow-[0_8px_25px_rgba(99,102,241,0.55)] sm:h-11 sm:w-11">
             <span className="absolute inset-[1.5px] rounded-[10px] bg-gradient-to-br from-[#102f43] via-[#183f59] to-[#111827]" />
 
@@ -423,9 +510,7 @@ function Navbar() {
             <span className="absolute bottom-[3px] left-[27px] z-10 h-[3px] w-[3px] rounded-full bg-white" />
           </span>
 
-          {/* BRAND */}
-
-          <span className="xs:block hidden text-xl font-extrabold tracking-tight text-white sm:text-2xl">
+          <span className="hidden text-xl font-extrabold tracking-tight text-white sm:block sm:text-2xl">
             Zentra
             <span className="text-amber-400">Cart</span>
           </span>
@@ -451,6 +536,7 @@ function Navbar() {
             />
 
             <button
+              type="button"
               onClick={handleSearch}
               className="flex shrink-0 items-center gap-1.5 bg-[#285570] px-4 text-sm font-semibold text-white transition hover:bg-indigo-600 sm:px-5"
             >
@@ -487,28 +573,29 @@ function Navbar() {
             label="Cart"
           />
 
-          {/* =================================================
-              LOCATION BUTTON
-          ================================================= */}
+          {/* LOCATION */}
 
           <div className="relative ml-1">
             <button
-              onClick={location ? handleClearLocation : handleUseLocation}
+              type="button"
+              onClick={
+                deliveryLocation ? handleClearLocation : handleUseLocation
+              }
               disabled={locationLoading}
               title={
-                location
+                deliveryLocation
                   ? "Disable 30 KM delivery filter"
                   : "Use my location for 30 KM delivery"
               }
               className={`group relative flex flex-col items-center justify-center gap-1 rounded-xl px-2.5 py-1.5 transition-all duration-200 hover:-translate-y-0.5 ${
-                location
+                deliveryLocation
                   ? "bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25"
                   : "text-slate-200 hover:bg-white/10 hover:text-white"
-              } `}
+              }`}
             >
               {locationLoading ? (
                 <Loader2 size={20} className="animate-spin" />
-              ) : location ? (
+              ) : deliveryLocation ? (
                 <MapPin size={20} />
               ) : (
                 <LocateFixed size={20} />
@@ -518,15 +605,18 @@ function Navbar() {
                 {locationLabel}
               </span>
 
-              {location && (
+              {deliveryLocation && (
                 <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-400 ring-2 ring-[#16405a]" />
               )}
             </button>
           </div>
 
+          {/* LOGIN / REGISTER */}
+
           {!isAuthenticated ? (
             <div className="ml-1 flex items-center gap-1">
               <button
+                type="button"
                 onClick={() => navigate("/login")}
                 className="rounded-lg px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
               >
@@ -534,6 +624,7 @@ function Navbar() {
               </button>
 
               <button
+                type="button"
                 onClick={() => navigate("/register")}
                 className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-bold text-[#0f2b3d] shadow transition hover:bg-amber-300"
               >
@@ -577,13 +668,12 @@ function Navbar() {
                 label="Alerts"
               />
 
-              {/* =================================================
-                  PROFILE
-              ================================================= */}
+              {/* PROFILE */}
 
               <div className="relative ml-1" ref={profileRef}>
                 <button
-                  onClick={() => setProfileOpen((p) => !p)}
+                  type="button"
+                  onClick={() => setProfileOpen((value) => !value)}
                   className="flex items-center gap-1.5 rounded-full py-1 pr-2 pl-1 transition hover:bg-white/10"
                 >
                   <span className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-400 text-sm font-bold text-[#0f2b3d] shadow-sm">
@@ -594,7 +684,7 @@ function Navbar() {
                     size={14}
                     className={`text-slate-300 transition-transform ${
                       profileOpen ? "rotate-180" : ""
-                    } `}
+                    }`}
                   />
                 </button>
 
@@ -624,6 +714,7 @@ function Navbar() {
                     </Link>
 
                     <button
+                      type="button"
                       onClick={handleLogout}
                       className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-red-600 transition hover:bg-red-50"
                     >
@@ -642,27 +733,28 @@ function Navbar() {
         ================================================= */}
 
         <div className="ml-auto flex items-center md:hidden">
-          {/* MOBILE LOCATION */}
+          {/* LOCATION */}
 
           <button
-            onClick={location ? handleClearLocation : handleUseLocation}
+            type="button"
+            onClick={deliveryLocation ? handleClearLocation : handleUseLocation}
             disabled={locationLoading}
             aria-label="Location"
             className={`relative rounded-lg p-2 transition ${
-              location
+              deliveryLocation
                 ? "text-emerald-300 hover:bg-emerald-500/10"
                 : "text-white hover:bg-white/10"
-            } `}
+            }`}
           >
             {locationLoading ? (
               <Loader2 size={20} className="animate-spin" />
-            ) : location ? (
+            ) : deliveryLocation ? (
               <MapPin size={21} />
             ) : (
               <LocateFixed size={21} />
             )}
 
-            {location && (
+            {deliveryLocation && (
               <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-emerald-400" />
             )}
           </button>
@@ -670,6 +762,7 @@ function Navbar() {
           {/* CART */}
 
           <button
+            type="button"
             onClick={() => navigate("/cart")}
             className="relative rounded-lg p-2 text-white transition hover:bg-white/10"
           >
@@ -685,7 +778,8 @@ function Navbar() {
           {/* MENU */}
 
           <button
-            onClick={() => setMobileOpen((p) => !p)}
+            type="button"
+            onClick={() => setMobileOpen((value) => !value)}
             className="ml-1 rounded-lg p-2 text-white transition hover:bg-white/10"
             aria-label="Toggle menu"
           >
@@ -698,22 +792,23 @@ function Navbar() {
           LOCATION STATUS BAR
       ===================================================== */}
 
-      {location && (
+      {deliveryLocation && (
         <div className="border-t border-emerald-400/10 bg-emerald-500/10">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-3 py-1.5 sm:px-6">
             <div className="flex min-w-0 items-center gap-2">
               <MapPin size={13} className="shrink-0 text-emerald-300" />
 
               <span className="truncate text-[10px] font-medium text-emerald-200 sm:text-xs">
-                Showing products from sellers within
+                Showing products from sellers within{" "}
                 <strong className="mx-1 font-bold text-emerald-300">
                   30 KM
-                </strong>
+                </strong>{" "}
                 of your location
               </span>
             </div>
 
             <button
+              type="button"
               onClick={handleClearLocation}
               className="flex shrink-0 items-center gap-1 text-[10px] font-semibold text-emerald-300 transition hover:text-white"
             >
@@ -737,6 +832,7 @@ function Navbar() {
             </p>
 
             <button
+              type="button"
               onClick={() => setLocationError("")}
               className="shrink-0 text-amber-300 hover:text-white"
             >
@@ -752,7 +848,7 @@ function Navbar() {
 
       {mobileOpen && (
         <div className="border-t border-white/10 bg-[#0b2435] px-3 py-4 shadow-xl md:hidden">
-          {/* MOBILE SEARCH */}
+          {/* SEARCH */}
 
           <div className="mb-4 flex overflow-hidden rounded-xl bg-white shadow">
             <input
@@ -769,6 +865,7 @@ function Navbar() {
             />
 
             <button
+              type="button"
               onClick={handleSearch}
               className="shrink-0 bg-[#285570] px-4 text-white transition hover:bg-indigo-600"
             >
@@ -776,34 +873,40 @@ function Navbar() {
             </button>
           </div>
 
-          {/* MOBILE LOCATION CARD */}
+          {/* LOCATION CARD */}
 
           <div
             className={`mb-4 rounded-2xl border p-3 ${
-              location
+              deliveryLocation
                 ? "border-emerald-400/20 bg-emerald-500/10"
                 : "border-white/10 bg-white/5"
-            } `}
+            }`}
           >
             <div className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3">
                 <div
                   className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-                    location
+                    deliveryLocation
                       ? "bg-emerald-400/15 text-emerald-300"
                       : "bg-white/10 text-slate-300"
-                  } `}
+                  }`}
                 >
-                  {location ? <MapPin size={19} /> : <LocateFixed size={19} />}
+                  {deliveryLocation ? (
+                    <MapPin size={19} />
+                  ) : (
+                    <LocateFixed size={19} />
+                  )}
                 </div>
 
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-white">
-                    {location ? "30 KM Delivery Active" : "Nearby Delivery"}
+                    {deliveryLocation
+                      ? "30 KM Delivery Active"
+                      : "Nearby Delivery"}
                   </p>
 
                   <p className="mt-0.5 text-[11px] text-slate-400">
-                    {location
+                    {deliveryLocation
                       ? "Nearby sellers are being shown"
                       : "Optional — use your location"}
                   </p>
@@ -811,17 +914,20 @@ function Navbar() {
               </div>
 
               <button
-                onClick={location ? handleClearLocation : handleUseLocation}
+                type="button"
+                onClick={
+                  deliveryLocation ? handleClearLocation : handleUseLocation
+                }
                 disabled={locationLoading}
                 className={`shrink-0 rounded-xl px-3 py-2 text-xs font-semibold transition ${
-                  location
+                  deliveryLocation
                     ? "border border-emerald-400/20 bg-emerald-400/10 text-emerald-300 hover:bg-red-400/10 hover:text-red-300"
                     : "bg-amber-400 text-[#0b2435] hover:bg-amber-300"
-                } `}
+                }`}
               >
                 {locationLoading ? (
                   <Loader2 size={15} className="animate-spin" />
-                ) : location ? (
+                ) : deliveryLocation ? (
                   "Disable"
                 ) : (
                   "Use Location"
@@ -854,6 +960,7 @@ function Navbar() {
             {/* HOME */}
 
             <button
+              type="button"
               onClick={() => {
                 navigate("/");
                 closeMobileMenu();
@@ -867,6 +974,7 @@ function Navbar() {
             {/* CART */}
 
             <button
+              type="button"
               onClick={() => {
                 navigate("/cart");
                 closeMobileMenu();
@@ -888,8 +996,9 @@ function Navbar() {
             {/* LOCATION */}
 
             <button
+              type="button"
               onClick={() => {
-                if (location) {
+                if (deliveryLocation) {
                   handleClearLocation();
                 } else {
                   handleUseLocation();
@@ -901,16 +1010,16 @@ function Navbar() {
               <span className="flex items-center gap-3">
                 {locationLoading ? (
                   <Loader2 size={18} className="animate-spin" />
-                ) : location ? (
+                ) : deliveryLocation ? (
                   <MapPin size={18} className="text-emerald-300" />
                 ) : (
                   <LocateFixed size={18} />
                 )}
 
-                {location ? "30 KM Delivery Active" : "Use My Location"}
+                {deliveryLocation ? "30 KM Delivery Active" : "Use My Location"}
               </span>
 
-              {location && (
+              {deliveryLocation && (
                 <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
                   ON
                 </span>
@@ -922,6 +1031,7 @@ function Navbar() {
             {!isAuthenticated ? (
               <>
                 <button
+                  type="button"
                   onClick={() => {
                     navigate("/login");
                     closeMobileMenu();
@@ -932,6 +1042,7 @@ function Navbar() {
                 </button>
 
                 <button
+                  type="button"
                   onClick={() => {
                     navigate("/register");
                     closeMobileMenu();
@@ -947,6 +1058,7 @@ function Navbar() {
 
                 {role === "user" && (
                   <button
+                    type="button"
                     onClick={() => {
                       navigate("/orders");
                       closeMobileMenu();
@@ -962,6 +1074,7 @@ function Navbar() {
 
                 {role === "user" ? (
                   <button
+                    type="button"
                     onClick={() => {
                       navigate("/wishlist");
                       closeMobileMenu();
@@ -981,6 +1094,7 @@ function Navbar() {
                   </button>
                 ) : (
                   <button
+                    type="button"
                     onClick={() => {
                       navigate(
                         role === "admin"
@@ -1001,9 +1115,9 @@ function Navbar() {
 
                 {role === "seller" && (
                   <button
+                    type="button"
                     onClick={() => {
                       navigate("/seller-orders");
-
                       closeMobileMenu();
                     }}
                     className="flex items-center gap-3 border-b border-white/10 py-3 text-left text-sm font-medium text-white"
@@ -1016,9 +1130,9 @@ function Navbar() {
                 {/* NOTIFICATIONS */}
 
                 <button
+                  type="button"
                   onClick={() => {
                     navigate("/notifications");
-
                     closeMobileMenu();
                   }}
                   className="flex items-center gap-3 border-b border-white/10 py-3 text-left text-sm font-medium text-white"
@@ -1041,6 +1155,7 @@ function Navbar() {
                 {/* LOGOUT */}
 
                 <button
+                  type="button"
                   onClick={handleLogout}
                   className="flex items-center gap-3 py-3 text-left text-sm font-semibold text-red-400 transition hover:text-red-300"
                 >
