@@ -73,19 +73,50 @@ exports.createOrder = async (req, res) => {
   const { coupon, addressId, buyNow = false, productId, quantity } = req.body;
 
   try {
+    // =================================================
+    // DEBUG LOG
+    // =================================================
+
+    console.log("==========================================");
+    console.log("CREATE ORDER REQUEST");
+    console.log("USER ID:", req.user?.id);
+    console.log("BUY NOW VALUE:", buyNow);
+    console.log("PRODUCT ID:", productId);
+    console.log("QUANTITY:", quantity);
+    console.log("ADDRESS ID:", addressId);
+    console.log("==========================================");
+
     let checkoutItems = [];
     let cartItems = [];
 
-    const isBuyNow = buyNow === true || buyNow === "true";
+    // =================================================
+    // IMPORTANT BUY NOW DETECTION
+    // =================================================
+    //
+    // We detect Buy Now in BOTH cases:
+    //
+    // 1. buyNow === true
+    // 2. productId exists
+    //
+    // This makes backend robust even if frontend sends
+    // buyNow as string/boolean or accidentally omits it.
+    //
+    // =================================================
+
+    const isBuyNow = buyNow === true || buyNow === "true" || Boolean(productId);
+
+    console.log("FINAL CHECKOUT MODE:", isBuyNow ? "BUY NOW" : "CART");
 
     // =================================================
     // PREPARE ORDER ITEMS
     // =================================================
 
     if (isBuyNow) {
-      // -------------------------------------------------
+      // =================================================
       // BUY NOW MODE
-      // -------------------------------------------------
+      // =================================================
+
+      console.log("BUY NOW MODE STARTED");
 
       if (!productId) {
         return res.status(400).json({
@@ -93,6 +124,10 @@ exports.createOrder = async (req, res) => {
           code: "PRODUCT_REQUIRED",
         });
       }
+
+      // =================================================
+      // VALIDATE QUANTITY
+      // =================================================
 
       const buyNowQuantity = Number(quantity);
 
@@ -103,7 +138,19 @@ exports.createOrder = async (req, res) => {
         });
       }
 
-      // Get selected product directly
+      console.log("BUY NOW PRODUCT ID:", productId);
+
+      console.log("BUY NOW QUANTITY:", buyNowQuantity);
+
+      // =================================================
+      // GET PRODUCT DIRECTLY
+      // =================================================
+      //
+      // VERY IMPORTANT:
+      // Do NOT read Cart in Buy Now mode.
+      //
+      // =================================================
+
       const buyNowProduct = await Product.findById(productId).populate(
         "seller",
         "_id name email location",
@@ -116,6 +163,16 @@ exports.createOrder = async (req, res) => {
         });
       }
 
+      console.log("BUY NOW PRODUCT FOUND:", buyNowProduct._id.toString());
+
+      console.log("BUY NOW PRODUCT TITLE:", buyNowProduct.title);
+
+      console.log("BUY NOW PRODUCT PRICE:", buyNowProduct.price);
+
+      // =================================================
+      // CREATE CHECKOUT ITEM
+      // =================================================
+
       checkoutItems = [
         {
           product: buyNowProduct,
@@ -123,13 +180,17 @@ exports.createOrder = async (req, res) => {
         },
       ];
     } else {
-      // -------------------------------------------------
+      // =================================================
       // NORMAL CART CHECKOUT MODE
-      // -------------------------------------------------
+      // =================================================
+
+      console.log("CART CHECKOUT MODE STARTED");
 
       cartItems = await Cart.find({
         user: req.user.id,
       }).populate("product");
+
+      console.log("CART ITEMS COUNT:", cartItems.length);
 
       if (cartItems.length === 0) {
         return res.status(400).json({
@@ -158,8 +219,10 @@ exports.createOrder = async (req, res) => {
       });
     }
 
+    console.log("CHECKOUT ITEMS COUNT:", checkoutItems.length);
+
     // =================================================
-    // CALCULATE TOTAL + BUILD ORDER PRODUCTS
+    // CALCULATE TOTAL
     // =================================================
 
     let totalAmount = 0;
@@ -168,6 +231,7 @@ exports.createOrder = async (req, res) => {
 
     checkoutItems.forEach((item) => {
       const itemPrice = Number(item.product?.price || 0);
+
       const itemQuantity = Number(item.quantity || 0);
 
       totalAmount += itemPrice * itemQuantity;
@@ -179,11 +243,28 @@ exports.createOrder = async (req, res) => {
     });
 
     // =================================================
+    // VALIDATE TOTAL
+    // =================================================
+
+    if (!Number.isFinite(totalAmount) || totalAmount < 0) {
+      return res.status(400).json({
+        message: "Invalid order amount",
+        code: "INVALID_ORDER_AMOUNT",
+      });
+    }
+
+    console.log("TOTAL PRODUCT AMOUNT:", totalAmount);
+
+    // =================================================
     // STOCK CHECK
     // =================================================
 
     for (const item of checkoutItems) {
-      if (Number(item.product.stock || 0) < Number(item.quantity || 0)) {
+      const availableStock = Number(item.product.stock || 0);
+
+      const requestedQuantity = Number(item.quantity || 0);
+
+      if (availableStock < requestedQuantity) {
         return res.status(400).json({
           message: `${item.product.title} is out of stock`,
           code: "OUT_OF_STOCK",
@@ -201,7 +282,10 @@ exports.createOrder = async (req, res) => {
       });
     }
 
-    // Address must belong to logged-in user
+    // =================================================
+    // ADDRESS MUST BELONG TO USER
+    // =================================================
+
     const selectedAddress = await Address.findOne({
       _id: addressId,
       user: req.user.id,
@@ -213,15 +297,15 @@ exports.createOrder = async (req, res) => {
       });
     }
 
-    // =========================================================
+    console.log("DELIVERY ADDRESS FOUND:", selectedAddress._id.toString());
+
+    // =================================================
     // OPTIONAL 30 KM DELIVERY VALIDATION
-    // =========================================================
+    // =================================================
 
     const customerHasLocation = hasValidCoordinates(selectedAddress.location);
 
     console.log("CUSTOMER LOCATION AVAILABLE:", customerHasLocation);
-
-    console.log("CHECKOUT MODE:", isBuyNow ? "BUY NOW" : "CART");
 
     // =================================================
     // GET SELLER IDS
@@ -274,9 +358,9 @@ exports.createOrder = async (req, res) => {
           ? product.seller.toString()
           : null;
 
-      // -------------------------------------------------
+      // =================================================
       // SELLER ID CHECK
-      // -------------------------------------------------
+      // =================================================
 
       if (!sellerId) {
         return res.status(400).json({
@@ -294,9 +378,9 @@ exports.createOrder = async (req, res) => {
         });
       }
 
-      // -------------------------------------------------
+      // =================================================
       // CUSTOMER LOCATION NOT AVAILABLE
-      // -------------------------------------------------
+      // =================================================
 
       if (!customerHasLocation) {
         console.log(
@@ -306,9 +390,9 @@ exports.createOrder = async (req, res) => {
         continue;
       }
 
-      // -------------------------------------------------
+      // =================================================
       // SELLER LOCATION CHECK
-      // -------------------------------------------------
+      // =================================================
 
       const sellerHasLocation = hasValidCoordinates(seller.location);
 
@@ -320,25 +404,25 @@ exports.createOrder = async (req, res) => {
         continue;
       }
 
-      // -------------------------------------------------
+      // =================================================
       // CUSTOMER COORDINATES
-      // -------------------------------------------------
+      // =================================================
 
       const customerLat = Number(selectedAddress.location.latitude);
 
       const customerLng = Number(selectedAddress.location.longitude);
 
-      // -------------------------------------------------
+      // =================================================
       // SELLER COORDINATES
-      // -------------------------------------------------
+      // =================================================
 
       const sellerLat = Number(seller.location.latitude);
 
       const sellerLng = Number(seller.location.longitude);
 
-      // -------------------------------------------------
+      // =================================================
       // CALCULATE DISTANCE
-      // -------------------------------------------------
+      // =================================================
 
       const distance = calculateDistanceKm(
         customerLat,
@@ -353,9 +437,9 @@ exports.createOrder = async (req, res) => {
         )} KM`,
       );
 
-      // -------------------------------------------------
+      // =================================================
       // 30 KM LIMIT
-      // -------------------------------------------------
+      // =================================================
 
       if (distance > DELIVERY_RADIUS_KM) {
         return res.status(400).json({
@@ -381,20 +465,35 @@ exports.createOrder = async (req, res) => {
 
     let couponCode = "";
 
-    if (coupon) {
+    if (coupon && typeof coupon === "string" && coupon.trim()) {
       const couponData = await Coupon.findOne({
-        code: coupon.toUpperCase(),
+        code: coupon.trim().toUpperCase(),
         isActive: true,
       });
 
       if (couponData && new Date() <= couponData.expiryDate) {
-        discountAmount = (totalAmount * couponData.discount) / 100;
+        discountAmount = (totalAmount * Number(couponData.discount || 0)) / 100;
+
+        // Never allow negative final amount
+        discountAmount = Math.min(discountAmount, totalAmount);
 
         finalAmount = totalAmount - discountAmount;
 
         couponCode = couponData.code;
       }
     }
+
+    // =================================================
+    // ROUND MONEY VALUES
+    // =================================================
+
+    totalAmount = Number(totalAmount.toFixed(2));
+
+    discountAmount = Number(discountAmount.toFixed(2));
+
+    finalAmount = Number(finalAmount.toFixed(2));
+
+    console.log("FINAL ORDER AMOUNT:", finalAmount);
 
     // =================================================
     // CREATE ORDER
@@ -430,6 +529,8 @@ exports.createOrder = async (req, res) => {
       },
     });
 
+    console.log("ORDER CREATED:", order._id.toString());
+
     // =================================================
     // REDUCE STOCK
     // =================================================
@@ -445,14 +546,23 @@ exports.createOrder = async (req, res) => {
     // CLEAR CART
     //
     // IMPORTANT:
-    // Buy Now -> DO NOT CLEAR CART
-    // Cart Checkout -> CLEAR CART
+    //
+    // Buy Now:
+    // DO NOT CLEAR CART
+    //
+    // Normal Cart Checkout:
+    // CLEAR CART
+    //
     // =================================================
 
     if (!isBuyNow) {
+      console.log("CART CHECKOUT -> CLEARING CART");
+
       await Cart.deleteMany({
         user: req.user.id,
       });
+    } else {
+      console.log("BUY NOW -> CART WILL NOT BE CLEARED");
     }
 
     // =================================================
@@ -465,6 +575,12 @@ exports.createOrder = async (req, res) => {
       order,
 
       checkoutMode: isBuyNow ? "buyNow" : "cart",
+
+      totalAmount,
+
+      discountAmount,
+
+      finalAmount,
     });
 
     // =================================================
@@ -473,15 +589,15 @@ exports.createOrder = async (req, res) => {
 
     setImmediate(async () => {
       try {
-        // -------------------------------------------------
+        // =================================================
         // GET USER
-        // -------------------------------------------------
+        // =================================================
 
         const user = await User.findById(req.user.id);
 
-        // -------------------------------------------------
+        // =================================================
         // SEND EMAIL
-        // -------------------------------------------------
+        // =================================================
 
         if (user) {
           try {
@@ -507,9 +623,9 @@ Thank you for shopping with ZentraCart.`,
           }
         }
 
-        // -------------------------------------------------
+        // =================================================
         // SAVE NOTIFICATION
-        // -------------------------------------------------
+        // =================================================
 
         try {
           await Notification.create({
@@ -523,9 +639,9 @@ Thank you for shopping with ZentraCart.`,
           console.error("NOTIFICATION ERROR:", notificationError.message);
         }
 
-        // -------------------------------------------------
+        // =================================================
         // SOCKET NOTIFICATION
-        // -------------------------------------------------
+        // =================================================
 
         try {
           const io = getIO();
@@ -609,6 +725,7 @@ exports.getSellerOrders = async (req, res) => {
 
     res.json({
       count: sellerOrders.length,
+
       orders: sellerOrders,
     });
   } catch (error) {
@@ -666,21 +783,30 @@ exports.cancelOrder = async (req, res) => {
       });
     }
 
-    // Only order owner can cancel
+    // =================================================
+    // ONLY ORDER OWNER CAN CANCEL
+    // =================================================
+
     if (order.user.toString() !== req.user.id) {
       return res.status(403).json({
         message: "Unauthorized",
       });
     }
 
-    // Shipped / delivered cannot be cancelled
+    // =================================================
+    // SHIPPED / DELIVERED CANNOT BE CANCELLED
+    // =================================================
+
     if (order.orderStatus === "shipped" || order.orderStatus === "delivered") {
       return res.status(400).json({
         message: "Order cannot be cancelled now",
       });
     }
 
-    // Already cancelled
+    // =================================================
+    // ALREADY CANCELLED
+    // =================================================
+
     if (order.orderStatus === "cancelled") {
       return res.status(400).json({
         message: "Order already cancelled",
@@ -692,9 +818,12 @@ exports.cancelOrder = async (req, res) => {
     // =================================================
 
     for (const item of order.products) {
-      if (!item.product) continue;
+      if (!item.product) {
+        continue;
+      }
 
-      item.product.stock = item.product.stock + item.quantity;
+      item.product.stock =
+        Number(item.product.stock || 0) + Number(item.quantity || 0);
 
       await item.product.save();
     }
@@ -733,14 +862,20 @@ exports.deleteOrder = async (req, res) => {
       });
     }
 
-    // Only order owner can delete
+    // =================================================
+    // ONLY ORDER OWNER CAN DELETE
+    // =================================================
+
     if (order.user.toString() !== req.user.id) {
       return res.status(403).json({
         message: "Unauthorized",
       });
     }
 
-    // Only cancelled orders can be permanently deleted
+    // =================================================
+    // ONLY CANCELLED ORDERS CAN BE DELETED
+    // =================================================
+
     if (order.orderStatus !== "cancelled") {
       return res.status(400).json({
         message: "Only cancelled orders can be deleted",
@@ -823,7 +958,9 @@ exports.downloadInvoice = async (req, res) => {
     doc.text("Products:");
 
     order.products.forEach((item) => {
-      if (!item.product) return;
+      if (!item.product) {
+        return;
+      }
 
       doc.text(`${item.product.title} x ${item.quantity}`);
     });
