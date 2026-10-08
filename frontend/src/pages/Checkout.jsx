@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
+
 import { useSelector } from "react-redux";
+
 import { useLocation, useNavigate } from "react-router-dom";
+
 import API from "../services/api";
+
 import Navbar from "../components/Navbar";
+
 import toast from "react-hot-toast";
 
 import {
@@ -33,10 +38,13 @@ function Checkout() {
 
   /*
     Normal Cart:
+
       /checkout
 
     Buy Now:
+
       /checkout
+
       state = {
         buyNow: {
           product: {...},
@@ -56,6 +64,7 @@ function Checkout() {
   const [cartItems, setCartItems] = useState([]);
 
   const [loading, setLoading] = useState(false);
+
   const [pageLoading, setPageLoading] = useState(true);
 
   // =====================================================
@@ -63,6 +72,7 @@ function Checkout() {
   // =====================================================
 
   const [coupon, setCoupon] = useState("");
+
   const [couponApplied, setCouponApplied] = useState(false);
 
   // =====================================================
@@ -70,11 +80,17 @@ function Checkout() {
   // =====================================================
 
   const [fullName, setFullName] = useState("");
+
   const [phone, setPhone] = useState("");
+
   const [address, setAddress] = useState("");
+
   const [city, setCity] = useState("");
+
   const [stateName, setStateName] = useState("");
+
   const [pincode, setPincode] = useState("");
+
   const [landmark, setLandmark] = useState("");
 
   // =====================================================
@@ -82,9 +98,11 @@ function Checkout() {
   // =====================================================
 
   const [latitude, setLatitude] = useState(null);
+
   const [longitude, setLongitude] = useState(null);
 
   const [locationLoading, setLocationLoading] = useState(false);
+
   const [locationReady, setLocationReady] = useState(false);
 
   // =====================================================
@@ -92,6 +110,7 @@ function Checkout() {
   // =====================================================
 
   const [addresses, setAddresses] = useState([]);
+
   const [selectedAddress, setSelectedAddress] = useState("");
 
   // =====================================================
@@ -115,6 +134,26 @@ function Checkout() {
   // =====================================================
 
   const fetchCart = async () => {
+    // ===================================================
+    // BUY NOW SAFETY GUARD
+    // ===================================================
+    //
+    // Buy Now checkout does NOT depend on the cart.
+    // Never call GET /cart in Buy Now mode.
+    //
+    // This is important because the user's cart can be
+    // completely empty while Buy Now checkout is active.
+    //
+
+    if (isBuyNow) {
+      console.log("BUY NOW MODE → Cart API skipped");
+      return;
+    }
+
+    // ===================================================
+    // NORMAL CART CHECKOUT
+    // ===================================================
+
     try {
       const res = await API.get("/cart", authConfig);
 
@@ -122,7 +161,21 @@ function Checkout() {
     } catch (error) {
       console.log("CART ERROR:", error.response?.data);
 
-      toast.error(error.response?.data?.message || "Failed to load cart");
+      /*
+        IMPORTANT:
+
+        Do NOT show:
+
+          toast.error("Cart is empty")
+
+        here.
+
+        Empty cart is a valid state and the UI already
+        displays "Your cart is empty".
+
+        More importantly, Buy Now mode must never reach
+        this request because of the guard above.
+      */
 
       setCartItems([]);
     }
@@ -164,7 +217,7 @@ function Checkout() {
 
           Buy Now mode:
           ----------------
-          Do NOT fetch cart for products.
+          Do NOT fetch cart.
 
           Normal mode:
           ----------------
@@ -173,9 +226,13 @@ function Checkout() {
 
         if (!isBuyNow) {
           await fetchCart();
+        } else {
+          console.log("CHECKOUT → BUY NOW MODE → Cart fetch skipped");
         }
 
         await fetchAddresses();
+      } catch (error) {
+        console.log("CHECKOUT LOAD ERROR:", error);
       } finally {
         setPageLoading(false);
       }
@@ -189,15 +246,25 @@ function Checkout() {
   // =====================================================
 
   const checkoutItems = useMemo(() => {
+    // ===================================================
+    // BUY NOW
+    // ===================================================
+
     if (isBuyNow && buyNowData?.product) {
       return [
         {
           _id: "buy-now-item",
+
           product: buyNowData.product,
+
           quantity: Math.max(1, Number(buyNowData.quantity || 1)),
         },
       ];
     }
+
+    // ===================================================
+    // NORMAL CART
+    // ===================================================
 
     return cartItems;
   }, [isBuyNow, buyNowData, cartItems]);
@@ -228,6 +295,7 @@ function Checkout() {
   const getCurrentLocation = () => {
     if (!navigator.geolocation) {
       toast.error("Geolocation is not supported by your browser.");
+
       return;
     }
 
@@ -236,12 +304,15 @@ function Checkout() {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const lat = position.coords.latitude;
+
         const lng = position.coords.longitude;
 
         setLatitude(lat);
+
         setLongitude(lng);
 
         setLocationReady(true);
+
         setLocationLoading(false);
 
         toast.success("Current location detected successfully.");
@@ -251,6 +322,7 @@ function Checkout() {
         console.log("LOCATION ERROR:", error);
 
         setLocationLoading(false);
+
         setLocationReady(false);
 
         if (error.code === 1) {
@@ -286,9 +358,11 @@ function Checkout() {
 
   const clearLocation = () => {
     setLatitude(null);
+
     setLongitude(null);
 
     setLocationReady(false);
+
     setDeliveryWarning("");
 
     toast.success("Location disabled. Normal shopping/order mode enabled.");
@@ -319,6 +393,7 @@ function Checkout() {
 
     if (!selectedAddress) {
       toast.error("Please select delivery address");
+
       return;
     }
 
@@ -326,6 +401,7 @@ function Checkout() {
 
     if (!selected) {
       toast.error("Selected address not found.");
+
       return;
     }
 
@@ -344,6 +420,7 @@ function Checkout() {
 
     const orderPayload = {
       coupon: coupon?.trim() || "",
+
       addressId: selectedAddress,
     };
 
@@ -356,8 +433,26 @@ function Checkout() {
 
     if (isBuyNow && buyNowProductId) {
       orderPayload.buyNow = true;
+
       orderPayload.productId = buyNowProductId;
+
       orderPayload.quantity = buyNowQuantity;
+    }
+
+    // ---------------------------------------------------
+    // OPTIONAL CUSTOMER LOCATION
+    // ---------------------------------------------------
+
+    if (
+      locationReady &&
+      latitude !== null &&
+      longitude !== null &&
+      Number.isFinite(Number(latitude)) &&
+      Number.isFinite(Number(longitude))
+    ) {
+      orderPayload.latitude = Number(latitude);
+
+      orderPayload.longitude = Number(longitude);
     }
 
     try {
@@ -376,12 +471,6 @@ function Checkout() {
           ? "Buy Now order placed successfully!"
           : "Order placed successfully!",
       );
-
-      /*
-        Remove Buy Now history state so if user
-        comes back to checkout, it doesn't accidentally
-        place the same Buy Now product again.
-      */
 
       navigate("/orders", {
         replace: true,
@@ -454,6 +543,32 @@ function Checkout() {
       }
 
       // =================================================
+      // CART EMPTY
+      // =================================================
+
+      /*
+        IMPORTANT:
+
+        If Buy Now is active and backend says
+        "Cart is empty", it means backend is incorrectly
+        reading Cart instead of Buy Now payload.
+
+        We show a useful message rather than allowing
+        repeated misleading Cart is empty toasts.
+      */
+
+      if (
+        isBuyNow &&
+        errorData?.message?.toLowerCase()?.includes("cart is empty")
+      ) {
+        toast.error(
+          "Buy Now checkout failed. Backend is still using the cart instead of the Buy Now product.",
+        );
+
+        return;
+      }
+
+      // =================================================
       // GENERIC ERROR
       // =================================================
 
@@ -469,11 +584,17 @@ function Checkout() {
 
   const saveAddress = async () => {
     const cleanFullName = fullName.trim();
+
     const cleanPhone = phone.trim();
+
     const cleanAddress = address.trim();
+
     const cleanCity = city.trim();
+
     const cleanState = stateName.trim();
+
     const cleanPincode = pincode.trim();
+
     const cleanLandmark = landmark.trim();
 
     // =================================================
@@ -482,41 +603,49 @@ function Checkout() {
 
     if (!cleanFullName) {
       toast.error("Please enter full name");
+
       return;
     }
 
     if (!cleanPhone) {
       toast.error("Please enter phone number");
+
       return;
     }
 
     if (!/^[0-9]{10}$/.test(cleanPhone)) {
       toast.error("Please enter a valid 10 digit phone number");
+
       return;
     }
 
     if (!cleanAddress) {
       toast.error("Please enter address");
+
       return;
     }
 
     if (!cleanCity) {
       toast.error("Please enter city");
+
       return;
     }
 
     if (!cleanState) {
       toast.error("Please enter state");
+
       return;
     }
 
     if (!cleanPincode) {
       toast.error("Please enter pincode");
+
       return;
     }
 
     if (!/^[0-9]{6}$/.test(cleanPincode)) {
       toast.error("Please enter a valid 6 digit pincode");
+
       return;
     }
 
@@ -526,11 +655,17 @@ function Checkout() {
 
     const payload = {
       fullName: cleanFullName,
+
       phone: cleanPhone,
+
       address: cleanAddress,
+
       city: cleanCity,
+
       state: cleanState,
+
       pincode: cleanPincode,
+
       landmark: cleanLandmark,
     };
 
@@ -545,6 +680,7 @@ function Checkout() {
       Number.isFinite(Number(longitude))
     ) {
       payload.latitude = Number(latitude);
+
       payload.longitude = Number(longitude);
     }
 
@@ -573,17 +709,25 @@ function Checkout() {
       // Clear form
 
       setFullName("");
+
       setPhone("");
+
       setAddress("");
+
       setCity("");
+
       setStateName("");
+
       setPincode("");
+
       setLandmark("");
 
       // Clear temporary location
 
       setLatitude(null);
+
       setLongitude(null);
+
       setLocationReady(false);
     } catch (error) {
       console.log("ADDRESS ERROR:", error.response?.data);
@@ -598,6 +742,7 @@ function Checkout() {
 
   const handleSelectAddress = (addressId) => {
     setSelectedAddress(addressId);
+
     setDeliveryWarning("");
 
     const selected = addresses.find((item) => item._id === addressId);
@@ -655,6 +800,7 @@ function Checkout() {
             <div className="mt-6 grid gap-5 lg:grid-cols-3">
               <div className="space-y-5 lg:col-span-2">
                 <div className="h-56 animate-pulse rounded-2xl bg-white" />
+
                 <div className="h-[600px] animate-pulse rounded-2xl bg-white" />
               </div>
 
@@ -1218,6 +1364,7 @@ function Checkout() {
                         value={coupon}
                         onChange={(e) => {
                           setCoupon(e.target.value);
+
                           setCouponApplied(false);
                         }}
                         className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm uppercase outline-none focus:border-slate-900 focus:bg-white"
@@ -1228,6 +1375,7 @@ function Checkout() {
                         onClick={() => {
                           if (!coupon.trim()) {
                             toast.error("Please enter coupon code");
+
                             return;
                           }
 
